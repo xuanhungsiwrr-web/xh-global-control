@@ -1,0 +1,15 @@
+subscriptions:
+
+  claude:
+    enabled: true
+    preferred_channel: claude-code-subscription
+
+    health_policy:
+      rate_limit_cooldown_minutes: 30
+
+  chatgpt:
+    enabled: true
+    preferred_channel: codex-subscription
+
+    health_policy:
+      rate_limit_cooldown_minutes: 30

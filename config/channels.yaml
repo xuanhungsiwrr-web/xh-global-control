@@ -1,0 +1,41 @@
+channels:
+
+  claude-code-subscription:
+    provider: anthropic
+    surface: claude_code
+    channel_class: subscription
+    billing_mode: subscription
+
+    priority: 100
+    enabled: true
+
+    capabilities:
+      - MASTER
+      - REASONING
+      - CODING
+      - FILES
+      - TERMINAL
+
+    supports_files: true
+    supports_terminal: true
+    supports_structured_output: true
+
+  codex-subscription:
+    provider: openai
+    surface: codex
+    channel_class: subscription
+    billing_mode: subscription
+
+    priority: 100
+    enabled: true
+
+    capabilities:
+      - MASTER
+      - REASONING
+      - CODING
+      - FILES
+      - TERMINAL
+
+    supports_files: true
+    supports_terminal: true
+    supports_structured_output: true

@@ -1,0 +1,67 @@
+"""Architecture enums defined by MVP v0.1."""
+
+from enum import StrEnum
+
+
+class CostMode(StrEnum):
+    ECONOMY = "ECONOMY"
+    BALANCED = "BALANCED"
+    MAX_QUALITY = "MAX_QUALITY"
+
+
+class TaskStatus(StrEnum):
+    CREATED = "CREATED"
+    QUEUED = "QUEUED"
+    ASSIGNED = "ASSIGNED"
+    RUNNING = "RUNNING"
+    WAITING_APPROVAL = "WAITING_APPROVAL"
+    PAUSED = "PAUSED"
+    RETRYING = "RETRYING"
+    FAILOVER_PENDING = "FAILOVER_PENDING"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
+
+
+class ChannelClass(StrEnum):
+    SUBSCRIPTION = "subscription"
+    FREE_LOCAL = "free_local"
+    CHEAP_API = "cheap_api"
+    PREMIUM_API = "premium_api"
+
+
+class ChannelHealth(StrEnum):
+    AVAILABLE = "AVAILABLE"
+    DEGRADED = "DEGRADED"
+    LIMIT_WARNING = "LIMIT_WARNING"
+    RATE_LIMITED = "RATE_LIMITED"
+    UNAVAILABLE = "UNAVAILABLE"
+    UNKNOWN = "UNKNOWN"
+
+
+class PermissionLevel(StrEnum):
+    READ_ONLY = "READ_ONLY"
+    SAFE_EDIT = "SAFE_EDIT"
+    PROJECT_WRITE = "PROJECT_WRITE"
+    SYSTEM_WRITE = "SYSTEM_WRITE"
+    PRIVILEGED = "PRIVILEGED"
+
+
+class MasterPreference(StrEnum):
+    AUTO = "AUTO"
+    CLAUDE = "CLAUDE"
+    CHATGPT = "CHATGPT"
+
+
+class FailureType(StrEnum):
+    WORKER_FAILURE = "WORKER_FAILURE"
+    CHANNEL_FAILURE = "CHANNEL_FAILURE"
+    RATE_LIMIT = "RATE_LIMIT"
+    AUTH_FAILURE = "AUTH_FAILURE"
+    PLUGIN_FAILURE = "PLUGIN_FAILURE"
+    TOOL_FAILURE = "TOOL_FAILURE"
+    BUDGET_BLOCK = "BUDGET_BLOCK"
+    PERMISSION_BLOCK = "PERMISSION_BLOCK"
+    DATA_SYNC_FAILURE = "DATA_SYNC_FAILURE"
+    USER_CANCEL = "USER_CANCEL"
+

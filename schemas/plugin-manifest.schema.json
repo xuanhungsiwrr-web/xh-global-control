@@ -1,0 +1,81 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "plugin_id": {
+      "minLength": 1,
+      "title": "Plugin Id",
+      "type": "string"
+    },
+    "version": {
+      "minLength": 1,
+      "title": "Version",
+      "type": "string"
+    },
+    "interface_version": {
+      "minLength": 1,
+      "title": "Interface Version",
+      "type": "string"
+    },
+    "domain": {
+      "minLength": 1,
+      "title": "Domain",
+      "type": "string"
+    },
+    "entrypoint_type": {
+      "minLength": 1,
+      "title": "Entrypoint Type",
+      "type": "string"
+    },
+    "entrypoint": {
+      "minLength": 1,
+      "title": "Entrypoint",
+      "type": "string"
+    },
+    "accepted_task_types": {
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "title": "Accepted Task Types",
+      "type": "array",
+      "uniqueItems": true
+    },
+    "owns_domain_workflow": {
+      "default": true,
+      "title": "Owns Domain Workflow",
+      "type": "boolean"
+    },
+    "owns_domain_learning": {
+      "default": true,
+      "title": "Owns Domain Learning",
+      "type": "boolean"
+    },
+    "required_global_capabilities": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Required Global Capabilities",
+      "type": "array",
+      "uniqueItems": true
+    },
+    "allowed_global_learning_fields": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Allowed Global Learning Fields",
+      "type": "array",
+      "uniqueItems": true
+    }
+  },
+  "required": [
+    "plugin_id",
+    "version",
+    "interface_version",
+    "domain",
+    "entrypoint_type",
+    "entrypoint",
+    "accepted_task_types"
+  ],
+  "title": "PluginManifest",
+  "type": "object"
+}

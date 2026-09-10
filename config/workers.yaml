@@ -1,0 +1,16 @@
+workers:
+
+  pc-main:
+    hostname: TRINITY-X1
+    enabled: true
+    priority: 100
+
+    capabilities:
+      - windows
+      - python
+      - codex
+      - filesystem
+
+    paths:
+      git_root: "D:/AI_Space_laptop"
+      project_root: "D:/AI_Space_laptop"

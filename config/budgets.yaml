@@ -1,0 +1,17 @@
+budgets:
+
+  global:
+    monthly_api_hard_usd: 30.0
+
+  daily:
+    api_soft_usd: 3.0
+    api_hard_usd: 8.0
+
+  defaults:
+    task_api_soft_usd: 1.0
+    task_api_hard_usd: 3.0
+
+  plugins:
+    xh-tuvan:
+      task_api_soft_usd: 2.0
+      task_api_hard_usd: 5.0

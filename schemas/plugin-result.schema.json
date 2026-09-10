@@ -1,0 +1,177 @@
+{
+  "$defs": {
+    "ExecutionSummary": {
+      "additionalProperties": false,
+      "properties": {
+        "elapsed_seconds": {
+          "minimum": 0,
+          "title": "Elapsed Seconds",
+          "type": "number"
+        },
+        "api_spend_usd": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Api Spend Usd",
+          "type": "number"
+        },
+        "subscription_calls": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Subscription Calls",
+          "type": "integer"
+        },
+        "api_calls": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Api Calls",
+          "type": "integer"
+        },
+        "retries": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Retries",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "elapsed_seconds"
+      ],
+      "title": "ExecutionSummary",
+      "type": "object"
+    },
+    "GlobalLearningSummary": {
+      "additionalProperties": false,
+      "properties": {
+        "model_performance": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Model Performance",
+          "type": "array"
+        },
+        "routing": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Routing",
+          "type": "array"
+        },
+        "provider_reliability": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Provider Reliability",
+          "type": "array"
+        },
+        "token_efficiency": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Token Efficiency",
+          "type": "array"
+        }
+      },
+      "title": "GlobalLearningSummary",
+      "type": "object"
+    },
+    "OutputArtifact": {
+      "additionalProperties": false,
+      "properties": {
+        "artifact_type": {
+          "minLength": 1,
+          "title": "Artifact Type",
+          "type": "string"
+        },
+        "uri": {
+          "minLength": 1,
+          "title": "Uri",
+          "type": "string"
+        },
+        "sha256": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Sha256"
+        }
+      },
+      "required": [
+        "artifact_type",
+        "uri"
+      ],
+      "title": "OutputArtifact",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "task_id": {
+      "minLength": 1,
+      "title": "Task Id",
+      "type": "string"
+    },
+    "status": {
+      "minLength": 1,
+      "title": "Status",
+      "type": "string"
+    },
+    "outputs": {
+      "items": {
+        "$ref": "#/$defs/OutputArtifact"
+      },
+      "title": "Outputs",
+      "type": "array"
+    },
+    "execution_summary": {
+      "$ref": "#/$defs/ExecutionSummary"
+    },
+    "global_learning": {
+      "$ref": "#/$defs/GlobalLearningSummary"
+    },
+    "domain_learning_stored_by_plugin": {
+      "default": true,
+      "title": "Domain Learning Stored By Plugin",
+      "type": "boolean"
+    },
+    "domain_learning_candidate_count": {
+      "default": 0,
+      "minimum": 0,
+      "title": "Domain Learning Candidate Count",
+      "type": "integer"
+    },
+    "handoff_uri": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Handoff Uri"
+    }
+  },
+  "required": [
+    "task_id",
+    "status",
+    "execution_summary",
+    "global_learning"
+  ],
+  "title": "PluginResult",
+  "type": "object"
+}

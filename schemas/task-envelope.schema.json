@@ -1,0 +1,177 @@
+{
+  "$defs": {
+    "CostMode": {
+      "enum": [
+        "ECONOMY",
+        "BALANCED",
+        "MAX_QUALITY"
+      ],
+      "title": "CostMode",
+      "type": "string"
+    },
+    "ExecutionRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "master_capability": {
+          "default": "MASTER",
+          "minLength": 1,
+          "title": "Master Capability",
+          "type": "string"
+        },
+        "master_preference": {
+          "$ref": "#/$defs/MasterPreference",
+          "default": "AUTO"
+        },
+        "cost_mode": {
+          "$ref": "#/$defs/CostMode",
+          "default": "BALANCED"
+        }
+      },
+      "title": "ExecutionRequest",
+      "type": "object"
+    },
+    "MasterPreference": {
+      "enum": [
+        "AUTO",
+        "CLAUDE",
+        "CHATGPT"
+      ],
+      "title": "MasterPreference",
+      "type": "string"
+    },
+    "PermissionLevel": {
+      "enum": [
+        "READ_ONLY",
+        "SAFE_EDIT",
+        "PROJECT_WRITE",
+        "SYSTEM_WRITE",
+        "PRIVILEGED"
+      ],
+      "title": "PermissionLevel",
+      "type": "string"
+    },
+    "PermissionRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "level": {
+          "$ref": "#/$defs/PermissionLevel",
+          "default": "SAFE_EDIT"
+        }
+      },
+      "title": "PermissionRequest",
+      "type": "object"
+    },
+    "ProjectRef": {
+      "additionalProperties": false,
+      "properties": {
+        "project_id": {
+          "minLength": 1,
+          "title": "Project Id",
+          "type": "string"
+        },
+        "workspace_uri": {
+          "minLength": 1,
+          "title": "Workspace Uri",
+          "type": "string"
+        }
+      },
+      "required": [
+        "project_id",
+        "workspace_uri"
+      ],
+      "title": "ProjectRef",
+      "type": "object"
+    },
+    "TaskBudget": {
+      "additionalProperties": false,
+      "properties": {
+        "api_soft_usd": {
+          "minimum": 0,
+          "title": "Api Soft Usd",
+          "type": "number"
+        },
+        "api_hard_usd": {
+          "minimum": 0,
+          "title": "Api Hard Usd",
+          "type": "number"
+        }
+      },
+      "required": [
+        "api_soft_usd",
+        "api_hard_usd"
+      ],
+      "title": "TaskBudget",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "default": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "task_id": {
+      "minLength": 1,
+      "title": "Task Id",
+      "type": "string"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "task_type": {
+      "minLength": 1,
+      "title": "Task Type",
+      "type": "string"
+    },
+    "plugin": {
+      "minLength": 1,
+      "title": "Plugin",
+      "type": "string"
+    },
+    "report_type": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Report Type"
+    },
+    "project": {
+      "$ref": "#/$defs/ProjectRef"
+    },
+    "execution": {
+      "$ref": "#/$defs/ExecutionRequest"
+    },
+    "permissions": {
+      "$ref": "#/$defs/PermissionRequest"
+    },
+    "budget": {
+      "$ref": "#/$defs/TaskBudget"
+    },
+    "user_request": {
+      "minLength": 1,
+      "title": "User Request",
+      "type": "string"
+    }
+  },
+  "required": [
+    "task_id",
+    "created_at",
+    "task_type",
+    "plugin",
+    "project",
+    "execution",
+    "permissions",
+    "budget",
+    "user_request"
+  ],
+  "title": "TaskEnvelope",
+  "type": "object"
+}

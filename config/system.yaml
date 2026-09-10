@@ -1,0 +1,16 @@
+system:
+  name: XH-AI
+  environment: production
+
+  default_cost_mode: BALANCED
+  default_master: AUTO
+
+  subscription_first: true
+
+  state_backend: sqlite
+  sqlite_path: runtime/control.db
+
+  infrastructure:
+    adapter: hermes
+
+  artifact_root: runtime/artifacts

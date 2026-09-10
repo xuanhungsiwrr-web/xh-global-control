@@ -1,0 +1,33 @@
+permissions:
+
+  default_level: SAFE_EDIT
+
+  levels:
+
+    READ_ONLY:
+      read_project: true
+      write_temp: false
+      write_project: false
+      modify_system: false
+
+    SAFE_EDIT:
+      read_project: true
+      write_temp: true
+      write_project: false
+      modify_system: false
+
+    PROJECT_WRITE:
+      read_project: true
+      write_temp: true
+      write_project: true
+      modify_system: false
+
+    SYSTEM_WRITE:
+      read_project: true
+      write_temp: true
+      write_project: true
+      modify_system: true
+      approval_required: true
+
+    PRIVILEGED:
+      approval_required: always

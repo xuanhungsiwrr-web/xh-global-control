@@ -1,0 +1,30 @@
+plugins:
+
+  xh-tuvan:
+    plugin_id: xh-tuvan
+    version: "0.7.3"
+    interface_version: "1.0"
+    domain: construction_consulting
+
+    entrypoint_type: process
+    entrypoint: "C:/Users/xuanh/plugins/xh-tuvan/bridge/wrapper.py"
+
+    accepted_task_types:
+      - generate_report
+      - review_report
+      - analyze_project
+
+    owns_domain_workflow: true
+    owns_domain_learning: true
+
+    required_global_capabilities:
+      - filesystem
+      - python
+
+    allowed_global_learning_fields:
+      - model_performance
+      - cost
+      - latency
+      - routing
+      - provider_reliability
+      - token_efficiency

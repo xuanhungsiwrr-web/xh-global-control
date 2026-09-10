@@ -1,0 +1,40 @@
+routing:
+
+  class_priority:
+    subscription: 100
+    free_local: 80
+    cheap_api: 50
+    premium_api: 20
+
+  weights:
+    capability_fit: 1.00
+    subscription_bonus: 0.90
+    quality: 0.70
+    reliability: 0.60
+    worker_affinity: 0.40
+
+    monetary_cost: -0.80
+    token_cost: -0.50
+    latency: -0.20
+    handoff_penalty: -0.40
+
+  modes:
+
+    ECONOMY:
+      premium_api_allowed: false
+      cross_review_allowed: false
+      api_escalation_threshold: high
+
+    BALANCED:
+      premium_api_allowed: true
+      cross_review_allowed: false
+      api_escalation_threshold: medium
+
+    MAX_QUALITY:
+      premium_api_allowed: true
+      cross_review_allowed: true
+      api_escalation_threshold: low
+
+  fallback:
+    max_retries_same_channel: 1
+    allow_cross_provider: true
