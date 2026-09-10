@@ -46,13 +46,15 @@ def test_controller_preferences_are_scoped_to_telegram_user(config_root):
     assert record.task.execution.cost_mode.value == "ECONOMY"
 
 
-def test_pause_and_resume_are_explicit_m6_stubs(config_root):
+def test_pause_and_resume_do_not_fall_back_to_m5_stub(config_root):
+    import pytest
+    from xh_control.exceptions import TaskNotFoundError
     config = load_config(config_root)
     database = initialize_database(config)
     controller = GlobalController(config, task_service=TaskService(TaskRepository(database)))
     update = TelegramUpdate("1", "u", "c", "")
 
-    pause = run_immediate(controller.handle_telegram_command(TelegramCommand("pause", ("T-1",)), update))
-    resume = run_immediate(controller.handle_telegram_command(TelegramCommand("resume", ("T-1",)), update))
-
-    assert pause == resume == "Command recognized. Real checkpointing will be implemented in M6."
+    with pytest.raises(TaskNotFoundError):
+        run_immediate(controller.handle_telegram_command(TelegramCommand("pause", ("T-1",)), update))
+    with pytest.raises(TaskNotFoundError):
+        run_immediate(controller.handle_telegram_command(TelegramCommand("resume", ("T-1",)), update))

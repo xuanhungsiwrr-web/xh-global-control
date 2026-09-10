@@ -25,6 +25,7 @@ from xh_control.workers.selector import WorkerSelector
 from .task_service import TaskService
 from .event_service import EventService
 from .artifact_service import ArtifactService
+from .checkpoint_service import CheckpointService
 from .channel_execution_service import ChannelExecutionService
 from .channel_execution_service import AdapterFactory
 
@@ -36,6 +37,7 @@ class ProcessExecutionService:
         self.tasks = TaskService(TaskRepository(self.database))
         self.events = EventService(EventRepository(self.database))
         self.artifacts = ArtifactService(ArtifactRepository(self.database))
+        self.checkpoint_service = CheckpointService(self.artifacts)
         self.metrics = OperationalMetricsService(CostRepository(self.database), GlobalLearningRepository(self.database))
         self.factory = adapter_factory or ChannelAdapterFactory(configuration).create
         self.active: dict[str, ProcessPluginAdapter] = {}
@@ -150,3 +152,39 @@ class ProcessExecutionService:
         transport = self.active.get(task_id)
         if transport:
             await transport.cancel(task_id)
+
+    async def pause(self, task_id: str) -> None:
+        """Request a plugin-owned safe pause, then persist the Global checkpoint."""
+        task = self.tasks.get_task(task_id)
+        PermissionPolicy(self.configuration.permissions).validate(task.task)
+        if task.status != TaskStatus.RUNNING or task.current_attempt_id is None:
+            raise PluginUnavailableError("task is not an active resumable execution")
+        transport = self.active.get(task_id)
+        if transport is None:
+            raise PluginUnavailableError("active plugin process is unavailable")
+        await transport.pause(task_id)
+        attempt = self.tasks.get_attempt(task.current_attempt_id)
+        refs = [item.uri for item in self.artifacts.list_for_task(task_id)]
+        self.checkpoint_service.create(
+            task, attempt_id=attempt.attempt_id, generation=attempt.generation,
+            worker_id=attempt.worker_id, channel_id=attempt.channel_id,
+            plugin_state_ref="opaque://plugin-state/pause", artifact_refs=refs,
+        )
+        self.tasks.transition_task(task_id, TaskStatus.PAUSED,
+                                   attempt_id=attempt.attempt_id, generation=attempt.generation)
+
+    async def resume(self, task_id: str) -> None:
+        """Validate the durable checkpoint before handing control to a plugin resume transport."""
+        task = self.tasks.get_task(task_id)
+        PermissionPolicy(self.configuration.permissions).validate(task.task)
+        if task.status != TaskStatus.PAUSED:
+            raise PluginResultError("task is not PAUSED")
+        checkpoint = self.checkpoint_service.load(task)
+        if task_id in self.active:
+            raise PluginResultError("task already executing")
+        # The current process protocol has no restart-safe resume verb yet.
+        # Refusing here is safer than replaying user history or duplicating an
+        # uncertain external side effect.
+        raise PluginUnavailableError(
+            f"resume transport is not implemented for checkpoint revision {checkpoint.revision}"
+        )

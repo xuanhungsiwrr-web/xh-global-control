@@ -11,6 +11,7 @@ from .enums import (
 )
 from .execution import ExecutionChannel
 from .artifact import ArtifactRecord
+from .checkpoint import GlobalCheckpoint
 from .budget import (
     ApprovalRecord,
     ApprovalStatus,
@@ -40,6 +41,7 @@ from .task import (
 
 __all__ = [
     "ArtifactRecord",
+    "GlobalCheckpoint",
     "ApprovalRecord",
     "ApprovalStatus",
     "BudgetAuthorization",

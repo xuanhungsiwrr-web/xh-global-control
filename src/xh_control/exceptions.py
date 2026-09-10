@@ -25,6 +25,14 @@ class ArtifactNotFoundError(XHControlError):
     """A requested artifact does not exist."""
 
 
+class CheckpointError(XHControlError):
+    """A checkpoint cannot be safely persisted or loaded."""
+
+
+class CheckpointIncompatibleError(CheckpointError):
+    """A checkpoint belongs to another task or is not compatible with resume."""
+
+
 class DuplicateRecordError(XHControlError):
     """A persistent record already uses the supplied identifier."""
 
