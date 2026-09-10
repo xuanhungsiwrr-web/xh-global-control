@@ -17,11 +17,11 @@ class DomainPluginAdapter(ABC):
         ...
 
     @abstractmethod
-    async def pause(self, task_id: str) -> None:
+    async def pause(self, task_id: str) -> str:
         ...
 
     @abstractmethod
-    async def resume(self, task_id: str) -> PluginResult:
+    async def resume(self, task: TaskEnvelope, handoff_uri: str) -> PluginResult:
         ...
 
     @abstractmethod

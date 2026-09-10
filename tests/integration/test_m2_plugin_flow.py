@@ -41,10 +41,10 @@ class MockDomainAdapter(DomainPluginAdapter):
         self.received.append(task)
         return self.result
 
-    async def pause(self, task_id: str) -> None:
-        return None
+    async def pause(self, task_id: str) -> str:
+        return "opaque://handoff"
 
-    async def resume(self, task_id: str) -> PluginResult:
+    async def resume(self, task: TaskEnvelope, handoff_uri: str) -> PluginResult:
         return self.result
 
     async def cancel(self, task_id: str) -> None:

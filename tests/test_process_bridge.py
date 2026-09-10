@@ -202,3 +202,77 @@ def test_cancel_awaits_channel_and_wrapper_exit(config_root, tmp_path):
             await work
         assert service.tasks.get_task("T-BRIDGE").status == TaskStatus.FAILED
     asyncio.run(scenario())
+
+
+def test_process_adapter_pause_returns_only_plugin_handoff_uri(tmp_path):
+    code = '''import json,sys,time,pathlib
+c=json.loads(pathlib.Path(sys.argv[-1]).read_text()); d=pathlib.Path(sys.argv[-1]).parent
+t=json.loads(sys.stdin.read())
+if c.get("resume_handoff_uri"):
+    r={"task_id":t["task_id"],"capability":"MASTER","workspace":t["project"]["workspace_uri"],"prompt_or_instruction":"opaque","artifact_refs":[]}
+    (d/"request.json").write_text(json.dumps(r))
+    while not (d/"response.json").exists(): time.sleep(.01)
+    print(json.dumps({"task_id":t["task_id"],"status":"COMPLETED","outputs":[],"execution_summary":{"elapsed_seconds":0.1,"subscription_calls":1},"global_learning":{}}))
+else:
+    while not (d/"pause.request.json").exists(): time.sleep(.01)
+    (d/"pause.response.json").write_text(json.dumps({"protocol_version":"1.1","task_id":t["task_id"],"handoff_uri":"opaque://handoff/M6"}))
+'''
+    task = envelope(tmp_path)
+    async def invoke(request):
+        return ChannelResponse(True, None, {}, 0)
+    async def cancel(task_id):
+        return None
+    async def scenario():
+        adapter = ProcessPluginAdapter((sys.executable, "-c", code), {"task_id": task.task_id}, tmp_path, invoke, cancel)
+        running = asyncio.create_task(adapter.execute(task))
+        while not adapter._directories:
+            await asyncio.sleep(.01)
+        assert await adapter.pause(task.task_id) == "opaque://handoff/M6"
+        with pytest.raises(PluginResultError):
+            await running
+        result = await adapter.resume(task, "opaque://handoff/M6")
+        assert result.task_id == task.task_id
+    asyncio.run(scenario())
+
+
+def test_process_execution_service_resume_passes_checkpoint_uri_to_bridge(config_root, tmp_path):
+    service, fake = configured(config_root, tmp_path)
+    task = envelope(tmp_path)
+    service.tasks.create_task(task)
+    attempt = service.tasks.create_attempt(task.task_id, "pc-main", "codex-subscription")
+    service.tasks.transition_task(task.task_id, TaskStatus.QUEUED)
+    service.tasks.transition_task(task.task_id, TaskStatus.ASSIGNED, attempt_id=attempt.attempt_id, generation=attempt.generation)
+    service.tasks.transition_task(task.task_id, TaskStatus.RUNNING, attempt_id=attempt.attempt_id, generation=attempt.generation)
+    service.checkpoint_service.create(
+        service.tasks.get_task(task.task_id), attempt_id=attempt.attempt_id,
+        generation=attempt.generation, worker_id=attempt.worker_id,
+        channel_id=attempt.channel_id, plugin_state_ref="opaque://handoff/M6",
+        artifact_refs=[],
+    )
+    service.tasks.transition_attempt(task.task_id, attempt.attempt_id, attempt.generation, TaskStatus.PAUSED)
+    service.tasks.transition_task(task.task_id, TaskStatus.PAUSED, attempt_id=attempt.attempt_id, generation=attempt.generation)
+    result = asyncio.run(service.resume(task.task_id))
+    assert result.status == "COMPLETED"
+    assert fake.calls[0].prompt_or_instruction == "opaque://handoff/M6"
+    assert service.tasks.get_task(task.task_id).status == TaskStatus.COMPLETED
+
+
+def test_process_execution_service_pause_persists_plugin_handoff(config_root, tmp_path):
+    service, fake = configured(config_root, tmp_path)
+    task = envelope(tmp_path)
+    service.tasks.create_task(task)
+    attempt = service.tasks.create_attempt(task.task_id, "pc-main", "codex-subscription")
+    service.tasks.transition_task(task.task_id, TaskStatus.QUEUED)
+    service.tasks.transition_task(task.task_id, TaskStatus.ASSIGNED, attempt_id=attempt.attempt_id, generation=attempt.generation)
+    service.tasks.transition_task(task.task_id, TaskStatus.RUNNING, attempt_id=attempt.attempt_id, generation=attempt.generation)
+
+    class SafeTransport:
+        async def pause(self, task_id):
+            return "opaque://handoff/M6-safe"
+
+    service.active[task.task_id] = SafeTransport()
+    asyncio.run(service.pause(task.task_id))
+    paused = service.tasks.get_task(task.task_id)
+    assert paused.status == TaskStatus.PAUSED
+    assert service.tasks.get_attempt(attempt.attempt_id).status == TaskStatus.PAUSED
+    assert service.checkpoint_service.load(paused).plugin_state_ref == "opaque://handoff/M6-safe"

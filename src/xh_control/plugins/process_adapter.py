@@ -37,6 +37,7 @@ class ProcessPluginAdapter(DomainPluginAdapter):
         self.cancel_channel = cancel_channel
         self.timeout_seconds = timeout_seconds
         self.active: dict[str, asyncio.subprocess.Process] = {}
+        self._directories: dict[str, Path] = {}
         self.cancelled: set[str] = set()
 
     async def healthcheck(self) -> bool:
@@ -61,13 +62,16 @@ class ProcessPluginAdapter(DomainPluginAdapter):
             raise
 
     async def execute(self, task: TaskEnvelope) -> PluginResult:
+        return await self._execute(task)
+
+    async def _execute(self, task: TaskEnvelope, context_overrides: dict | None = None) -> PluginResult:
         if task.task_id in self.active:
             raise PluginResultError("task already executing")
         if task.task_id != self.context["task_id"]:
             raise PluginResultError("task does not match bound context")
         directory = self.runtime_root / uuid4().hex
         directory.mkdir(parents=True)
-        context = self.context | {
+        context = self.context | (context_overrides or {}) | {
             "protocol_version": "1.0",
             "channel_bridge": [sys.executable, "-m", "xh_control.interfaces.channel_bridge"],
             "timeout_seconds": self.timeout_seconds,
@@ -79,6 +83,7 @@ class ProcessPluginAdapter(DomainPluginAdapter):
             stderr=asyncio.subprocess.DEVNULL, start_new_session=os.name != "nt",
         )
         self.active[task.task_id] = process
+        self._directories[task.task_id] = directory
         communication = asyncio.create_task(process.communicate(task.model_dump_json().encode()))
         response = None
         try:
@@ -135,15 +140,52 @@ class ProcessPluginAdapter(DomainPluginAdapter):
         finally:
             await asyncio.gather(communication, return_exceptions=True)
             self.active.pop(task.task_id, None)
+            self._directories.pop(task.task_id, None)
             # Transport files contain no authoritative state and are not replayed.
-            for name in ("context.json", "request.json", "response.json", "channel.claim"):
+            for name in ("context.json", "request.json", "response.json", "channel.claim",
+                         "pause.request.json", "pause.response.json"):
                 (directory / name).unlink(missing_ok=True)
 
-    async def pause(self, task_id: str) -> None:
-        raise PluginUnavailableError("safe plugin checkpoint is not available in M4")
+    async def pause(self, task_id: str) -> str:
+        """Ask the plugin process for an opaque, durable handoff URI.
 
-    async def resume(self, task_id: str) -> PluginResult:
-        raise PluginUnavailableError("plugin resume is not available in M4")
+        The response contains only the URI. Global never opens or interprets
+        the referenced handoff document.
+        """
+        directory = self._directories.get(task_id)
+        if directory is None:
+            raise PluginUnavailableError("task is not actively executing")
+        process = self.active[task_id]
+        publish(directory / "pause.request.json", {
+            "protocol_version": "1.1", "task_id": task_id,
+        })
+        response_path = directory / "pause.response.json"
+        deadline = asyncio.get_running_loop().time() + min(self.timeout_seconds, 30)
+        while asyncio.get_running_loop().time() < deadline:
+            if response_path.exists():
+                try:
+                    response = read_message(response_path)
+                except (OSError, ValueError) as exc:
+                    raise PluginResultError("invalid plugin pause response") from exc
+                if set(response) != {"protocol_version", "task_id", "handoff_uri"}:
+                    raise PluginResultError("invalid plugin pause response")
+                if response["protocol_version"] != "1.1" or response["task_id"] != task_id:
+                    raise PluginResultError("plugin pause response does not match task")
+                handoff_uri = response["handoff_uri"]
+                if not isinstance(handoff_uri, str) or not handoff_uri.strip():
+                    raise PluginResultError("plugin pause response has no handoff URI")
+                try:
+                    await asyncio.wait_for(process.wait(), min(self.timeout_seconds, 30))
+                except TimeoutError as exc:
+                    raise PluginUnavailableError("plugin did not stop after safe handoff") from exc
+                return handoff_uri
+            await asyncio.sleep(0.02)
+        raise PluginUnavailableError("plugin did not provide a safe handoff URI")
+
+    async def resume(self, task: TaskEnvelope, handoff_uri: str) -> PluginResult:
+        if not isinstance(handoff_uri, str) or not handoff_uri.strip():
+            raise PluginResultError("resume requires a non-empty handoff URI")
+        return await self._execute(task, {"resume_handoff_uri": handoff_uri})
 
     async def cancel(self, task_id: str) -> None:
         if task_id not in self.active:

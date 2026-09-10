@@ -127,6 +127,15 @@ class CheckpointService:
                 raise CheckpointError("checkpoint references a changed artifact")
         return checkpoint
 
+    def accessible_artifact_refs(self, task_id: str) -> list[str]:
+        """Return registered local refs that can be handed to another worker."""
+        refs = []
+        for artifact in self.artifacts.list_for_task(task_id):
+            path = _local_path(artifact.uri)
+            if path is not None and path.is_file():
+                refs.append(artifact.uri)
+        return refs
+
     def _next_revision(self, task: TaskRecord, artifact_refs: list[str]) -> int:
         revisions = []
         for item in self.artifacts.list_for_task(task.task.task_id):

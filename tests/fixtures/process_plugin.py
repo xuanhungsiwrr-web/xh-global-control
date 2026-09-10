@@ -19,6 +19,10 @@ context = json.loads(args.context.read_text())
 request = {"task_id": task["task_id"], "capability": task["execution"]["master_capability"],
            "workspace": task["project"]["workspace_uri"], "prompt_or_instruction": task["user_request"],
            "artifact_refs": []}
+if context.get("resume_handoff_uri"):
+    # Test-only assertion surface: the bridge receives the URI as an opaque
+    # prompt value; it never opens the referenced handoff.
+    request["prompt_or_instruction"] = context["resume_handoff_uri"]
 reply = subprocess.run([*context["channel_bridge"], "--context", str(args.context)],
                        input=json.dumps(request), capture_output=True, text=True, timeout=20)
 if reply.returncode:

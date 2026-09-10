@@ -25,14 +25,14 @@ class XHTuvanAdapter(DomainPluginAdapter):
             return await self.transport.execute(task)
         raise PluginUnavailableError(self._BLOCKER)
 
-    async def pause(self, task_id: str) -> None:
+    async def pause(self, task_id: str) -> str:
         if self.transport:
             return await self.transport.pause(task_id)
         raise PluginUnavailableError(self._BLOCKER)
 
-    async def resume(self, task_id: str) -> PluginResult:
+    async def resume(self, task: TaskEnvelope, handoff_uri: str) -> PluginResult:
         if self.transport:
-            return await self.transport.resume(task_id)
+            return await self.transport.resume(task, handoff_uri)
         raise PluginUnavailableError(self._BLOCKER)
 
     async def cancel(self, task_id: str) -> None:

@@ -42,9 +42,15 @@ class ProcessExecutionService:
         self.factory = adapter_factory or ChannelAdapterFactory(configuration).create
         self.active: dict[str, ProcessPluginAdapter] = {}
 
-    async def execute(self, task: TaskEnvelope) -> PluginResult:
+    async def execute(
+        self, task: TaskEnvelope, *, resume_handoff_uri: str | None = None,
+        resume: bool = False,
+    ) -> PluginResult:
         if task.task_id in self.active:
             raise PluginResultError("task already executing")
+        existing = self.tasks.get_task(task.task_id) if resume else None
+        if resume and (existing is None or existing.task != task or existing.status != TaskStatus.QUEUED):
+            raise PluginResultError("resume task is not queued with the original identity")
         manifest = self.configuration.plugins.get(task.plugin)
         if manifest is None or manifest.entrypoint_type != "process":
             raise PluginUnavailableError("configured process plugin required")
@@ -70,8 +76,16 @@ class ProcessExecutionService:
         config = self.configuration.model_copy(update={"channels": channels})
         channel = ChannelRouter(config).resolve_master_channel(task=task, worker_id=worker)
         adapter = adapters[channel.channel_id]
-        self.tasks.create_task(task)
-        attempt = self.tasks.create_attempt(task.task_id, worker, channel.channel_id)
+        if resume:
+            if not resume_handoff_uri:
+                raise PluginResultError("resume requires a handoff URI")
+            attempt_id = existing.current_attempt_id
+            if attempt_id is None:
+                raise PluginResultError("resume task has no current attempt")
+            attempt = self.tasks.get_attempt(attempt_id)
+        else:
+            self.tasks.create_task(task)
+            attempt = self.tasks.create_attempt(task.task_id, worker, channel.channel_id)
         context = {
             "task_id": task.task_id, "attempt_id": attempt.attempt_id,
             "generation": attempt.generation, "worker_id": worker,
@@ -79,6 +93,8 @@ class ProcessExecutionService:
             "permissions": task.permissions.model_dump(mode="json"),
             "budget": task.budget.model_dump(mode="json"),
         }
+        if resume_handoff_uri is not None:
+            context["resume_handoff_uri"] = resume_handoff_uri
         channel_service = ChannelExecutionService(
             self.tasks, self.events, self.artifacts, self.metrics, channels,
             lambda bound_task, bound_channel: adapter,
@@ -111,10 +127,15 @@ class ProcessExecutionService:
             if not await plugin.healthcheck():
                 raise PluginUnavailableError("plugin wrapper healthcheck failed")
             for state in (TaskStatus.QUEUED, TaskStatus.ASSIGNED, TaskStatus.RUNNING):
-                self.tasks.transition_task(task.task_id, state)
+                if self.tasks.get_task(task.task_id).status != state:
+                    self.tasks.transition_task(task.task_id, state)
             self.tasks.transition_attempt(task.task_id, attempt.attempt_id, attempt.generation, TaskStatus.RUNNING)
             self.events.append(task.task_id, "PLUGIN_EXECUTION_STARTED", {"plugin_id": task.plugin}, attempt_id=attempt.attempt_id)
-            result = await plugin.execute(task)
+            result = (
+                await plugin.resume(task, resume_handoff_uri)
+                if resume
+                else await plugin.execute(task)
+            )
             if task.task_id in transport.cancelled:
                 raise PluginResultError("PLUGIN_CANCELLED")
             target = TaskStatus(result.status)
@@ -162,18 +183,19 @@ class ProcessExecutionService:
         transport = self.active.get(task_id)
         if transport is None:
             raise PluginUnavailableError("active plugin process is unavailable")
-        await transport.pause(task_id)
+        handoff_uri = await transport.pause(task_id)
         attempt = self.tasks.get_attempt(task.current_attempt_id)
-        refs = [item.uri for item in self.artifacts.list_for_task(task_id)]
+        refs = self.checkpoint_service.accessible_artifact_refs(task_id)
         self.checkpoint_service.create(
             task, attempt_id=attempt.attempt_id, generation=attempt.generation,
             worker_id=attempt.worker_id, channel_id=attempt.channel_id,
-            plugin_state_ref="opaque://plugin-state/pause", artifact_refs=refs,
+            plugin_state_ref=handoff_uri, artifact_refs=refs,
         )
+        self.tasks.transition_attempt(task_id, attempt.attempt_id, attempt.generation, TaskStatus.PAUSED)
         self.tasks.transition_task(task_id, TaskStatus.PAUSED,
                                    attempt_id=attempt.attempt_id, generation=attempt.generation)
 
-    async def resume(self, task_id: str) -> None:
+    async def resume(self, task_id: str) -> PluginResult:
         """Validate the durable checkpoint before handing control to a plugin resume transport."""
         task = self.tasks.get_task(task_id)
         PermissionPolicy(self.configuration.permissions).validate(task.task)
@@ -182,9 +204,9 @@ class ProcessExecutionService:
         checkpoint = self.checkpoint_service.load(task)
         if task_id in self.active:
             raise PluginResultError("task already executing")
-        # The current process protocol has no restart-safe resume verb yet.
-        # Refusing here is safer than replaying user history or duplicating an
-        # uncertain external side effect.
-        raise PluginUnavailableError(
-            f"resume transport is not implemented for checkpoint revision {checkpoint.revision}"
+        self.tasks.transition_task(task_id, TaskStatus.QUEUED,
+                                   attempt_id=checkpoint.attempt_id,
+                                   generation=checkpoint.generation)
+        return await self.execute(
+            task.task, resume_handoff_uri=checkpoint.plugin_state_ref, resume=True,
         )

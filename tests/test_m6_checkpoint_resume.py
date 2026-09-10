@@ -66,7 +66,12 @@ def test_checkpoint_rejects_missing_or_changed_artifact(config_root, tmp_path):
 
 def test_controller_pause_resume_uses_persisted_checkpoint(config_root, tmp_path):
     tasks, artifacts, checkpoints, attempt = _services(config_root, tmp_path)
-    controller = GlobalController(load_config(config_root), task_service=tasks, checkpoint_service=checkpoints)
+    class ExecutionHook:
+        async def pause(self, task_id):
+            tasks.transition_task(task_id, TaskStatus.PAUSED, attempt_id=attempt.attempt_id, generation=attempt.generation)
+        async def resume(self, task_id):
+            tasks.transition_task(task_id, TaskStatus.QUEUED, attempt_id=attempt.attempt_id, generation=attempt.generation)
+    controller = GlobalController(load_config(config_root), task_service=tasks, execution_service=ExecutionHook(), checkpoint_service=checkpoints)
     update = TelegramUpdate("1", "u", "c", "")
     def immediate(coroutine):
         try:

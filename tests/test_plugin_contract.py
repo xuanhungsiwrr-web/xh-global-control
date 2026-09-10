@@ -34,10 +34,10 @@ class StaticAdapter(DomainPluginAdapter):
         self.executed_tasks.append(task)
         return self.result
 
-    async def pause(self, task_id: str) -> None:
-        return None
+    async def pause(self, task_id: str) -> str:
+        return "opaque://handoff"
 
-    async def resume(self, task_id: str) -> PluginResult:
+    async def resume(self, task: TaskEnvelope, handoff_uri: str) -> PluginResult:
         return self.result
 
     async def cancel(self, task_id: str) -> None:
@@ -76,7 +76,7 @@ def test_domain_plugin_adapter_signatures_are_stable():
     assert list(inspect.signature(DomainPluginAdapter.healthcheck).parameters) == ["self"]
     assert list(inspect.signature(DomainPluginAdapter.execute).parameters) == ["self", "task"]
     assert list(inspect.signature(DomainPluginAdapter.pause).parameters) == ["self", "task_id"]
-    assert list(inspect.signature(DomainPluginAdapter.resume).parameters) == ["self", "task_id"]
+    assert list(inspect.signature(DomainPluginAdapter.resume).parameters) == ["self", "task", "handoff_uri"]
     assert list(inspect.signature(DomainPluginAdapter.cancel).parameters) == ["self", "task_id"]
 
 
@@ -108,6 +108,6 @@ def test_xh_tuvan_adapter_reports_verified_bridge_blocker():
     with pytest.raises(PluginUnavailableError, match="ACR-001"):
         run_immediate(adapter.pause("T-1"))
     with pytest.raises(PluginUnavailableError, match="ACR-001"):
-        run_immediate(adapter.resume("T-1"))
+        run_immediate(adapter.resume(task(plugin="xh-tuvan", task_type="generate_report"), "opaque://handoff"))
     with pytest.raises(PluginUnavailableError, match="ACR-001"):
         run_immediate(adapter.cancel("T-1"))
