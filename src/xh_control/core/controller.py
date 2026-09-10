@@ -8,9 +8,7 @@ from typing import Any
 
 from xh_control.config import Configuration
 from xh_control.core.identifiers import new_task_id
-from xh_control.exceptions import CheckpointError, InvalidTaskTransitionError
-from xh_control.models import TaskStatus
-from xh_control.permissions import PermissionPolicy
+from xh_control.exceptions import PluginUnavailableError
 from xh_control.interfaces.telegram import TelegramCommand, TelegramUpdate
 from xh_control.models import (
     ApprovalStatus,
@@ -108,7 +106,8 @@ class GlobalController:
         if self.execution_service is not None and hasattr(self.execution_service, "pause"):
             await self.execution_service.pause(task_id)
         else:
-            await self._pause_without_executor(task_id)
+            self.task_service.get_task(task_id)
+            raise PluginUnavailableError("pause requires an execution service")
         return f"Paused: {task_id}"
 
     async def _command_resume(self, command, update):
@@ -116,42 +115,9 @@ class GlobalController:
         if self.execution_service is not None and hasattr(self.execution_service, "resume"):
             await self.execution_service.resume(task_id)
         else:
-            await self._resume_without_executor(task_id)
+            self.task_service.get_task(task_id)
+            raise PluginUnavailableError("resume requires an execution service")
         return f"Resume queued: {task_id}"
-
-    async def _pause_without_executor(self, task_id: str) -> None:
-        task = self.task_service.get_task(task_id)
-        PermissionPolicy(self.configuration.permissions).validate(task.task)
-        if task.status != TaskStatus.RUNNING:
-            raise InvalidTaskTransitionError(f"Task {task_id} is not RUNNING")
-        attempt_id = task.current_attempt_id
-        if self.checkpoint_service is None or attempt_id is None:
-            raise CheckpointError("checkpoint service or current attempt is unavailable")
-        attempt = self.task_service.get_attempt(attempt_id)
-        artifacts = getattr(self.checkpoint_service, "artifacts", None)
-        refs = [item.uri for item in artifacts.list_for_task(task_id)] if artifacts else []
-        self.checkpoint_service.create(
-            task, attempt_id=attempt.attempt_id, generation=attempt.generation,
-            worker_id=attempt.worker_id, channel_id=attempt.channel_id,
-            plugin_state_ref="opaque://plugin-state/pause",
-            artifact_refs=refs,
-        )
-        self.task_service.transition_task(task_id, TaskStatus.PAUSED,
-                                          attempt_id=attempt.attempt_id, generation=attempt.generation)
-
-    async def _resume_without_executor(self, task_id: str) -> None:
-        task = self.task_service.get_task(task_id)
-        PermissionPolicy(self.configuration.permissions).validate(task.task)
-        if task.status != TaskStatus.PAUSED:
-            raise InvalidTaskTransitionError(f"Task {task_id} is not PAUSED")
-        if self.checkpoint_service is None:
-            raise CheckpointError("checkpoint service is unavailable")
-        checkpoint = self.checkpoint_service.load(task)
-        attempt = self.task_service.get_attempt(checkpoint.attempt_id)
-        if attempt.generation != checkpoint.generation:
-            raise CheckpointError("checkpoint execution generation is stale")
-        self.task_service.transition_task(task_id, TaskStatus.QUEUED,
-                                          attempt_id=attempt.attempt_id, generation=attempt.generation)
 
     async def _command_stop(self, command, update):
         if self.execution_service is None:
