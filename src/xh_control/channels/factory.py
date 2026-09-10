@@ -23,7 +23,7 @@ class ChannelAdapterFactory:
     ) -> None:
         self.configuration = configuration
         self.permission_policy = PermissionPolicy(configuration.permissions)
-        configured_root = configuration.config_root.parent / configuration.system.artifact_root
+        configured_root = configuration.artifact_path
         self.output_root = Path(output_root or configured_root).resolve()
 
     def create(

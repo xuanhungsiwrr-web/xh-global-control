@@ -914,6 +914,39 @@ class ApprovalRepository(SQLiteRepository):
             }
         )
 
+    def decide(self, approval_id: str, status: ApprovalStatus, decided_by: str) -> ApprovalRecord:
+        """Decide one pending approval and resume or fail its waiting task."""
+        if status not in {ApprovalStatus.APPROVED, ApprovalStatus.DENIED}:
+            raise ValueError("approval decision must be APPROVED or DENIED")
+        if not decided_by:
+            raise ValueError("decided_by must not be empty")
+        now = datetime.now().astimezone()
+        with self.connection() as connection, connection:
+            row = connection.execute(
+                "SELECT task_id, status FROM approvals WHERE approval_id = ?",
+                (approval_id,),
+            ).fetchone()
+            if row is None:
+                raise TaskNotFoundError(f"Approval not found: {approval_id}")
+            if row["status"] != ApprovalStatus.PENDING.value:
+                raise StateConflictError(f"Approval {approval_id} is already decided")
+            connection.execute(
+                "UPDATE approvals SET status = ?, decided_at = ?, decided_by = ? WHERE approval_id = ? AND status = ?",
+                (status.value, _timestamp(now), decided_by, approval_id, ApprovalStatus.PENDING.value),
+            )
+            target = TaskStatus.RUNNING if status == ApprovalStatus.APPROVED else TaskStatus.FAILED
+            task_row = connection.execute("SELECT status FROM tasks WHERE task_id = ?", (row["task_id"],)).fetchone()
+            if task_row is None:
+                raise TaskNotFoundError(f"Task not found: {row['task_id']}")
+            if task_row["status"] == TaskStatus.WAITING_APPROVAL.value:
+                connection.execute("UPDATE tasks SET status = ?, updated_at = ? WHERE task_id = ? AND status = ?",
+                                   (target.value, _timestamp(now), row["task_id"], TaskStatus.WAITING_APPROVAL.value))
+                TaskRepository._append_event(connection, row["task_id"], None, "TASK_STATUS_CHANGED",
+                                             {"from_status": TaskStatus.WAITING_APPROVAL.value, "to_status": target.value}, now)
+            TaskRepository._append_event(connection, row["task_id"], None, "APPROVAL_DECIDED",
+                                         {"approval_id": approval_id, "status": status.value, "decided_by": decided_by}, now)
+        return self.get(approval_id)
+
     def list_for_task(self, task_id: str) -> list[ApprovalRecord]:
         with self.connection() as connection:
             rows = connection.execute(

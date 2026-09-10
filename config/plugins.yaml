@@ -2,12 +2,12 @@ plugins:
 
   xh-tuvan:
     plugin_id: xh-tuvan
-    version: "0.7.3"
+    version: "0.9.0"
     interface_version: "1.0"
     domain: construction_consulting
 
     entrypoint_type: process
-    entrypoint: "C:/Users/xuanh/plugins/xh-tuvan/bridge/wrapper.py"
+    entrypoint: "G:/My Drive/AI_Space/01_Development/incoming/xh-tuvan-0.9.0/bridge/wrapper.py"
 
     accepted_task_types:
       - generate_report

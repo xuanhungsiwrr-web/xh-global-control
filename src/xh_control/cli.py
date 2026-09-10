@@ -23,6 +23,11 @@ from .models import (
     TaskEnvelope,
 )
 from .state import TaskRepository, initialize_database
+from .state import ApprovalRepository, CostRepository
+from .core.controller import GlobalController
+from .core.process_execution_service import ProcessExecutionService
+from .interfaces.telegram import TelegramAdapter
+from .interfaces.telegram_http import serve as serve_telegram
 
 app = typer.Typer(no_args_is_help=True)
 ConfigRoot = Annotated[Path | None, typer.Option(help="Configuration directory; defaults to repository/config.")]
@@ -112,6 +117,35 @@ def run_task(
     typer.echo(f"Status: {record.status.value}")
     typer.echo("Audit events: 1")
     typer.echo("Dry run: no plugin or execution channel was invoked")
+
+
+@app.command("telegram-serve")
+def telegram_serve(
+    user_id: Annotated[list[str], typer.Option("--user-id", help="Authorized Telegram user ID; repeatable.")],
+    chat_id: Annotated[list[str], typer.Option("--chat-id", help="Optional authorized Telegram chat ID; repeatable.")] = [],
+    host: Annotated[str, typer.Option(help="Loopback bind host.")] = "127.0.0.1",
+    port: Annotated[int, typer.Option(help="Loopback bind port.")] = 8765,
+    config_root: ConfigRoot = None,
+) -> None:
+    """Serve the Hermes-to-Global normalized Telegram update boundary."""
+    if not user_id:
+        typer.echo("At least one --user-id is required; no allow-all mode exists.", err=True)
+        raise typer.Exit(2)
+    try:
+        config = load_config(config_root)
+        service = ProcessExecutionService(config)
+        controller = GlobalController(
+            config,
+            task_service=service.tasks,
+            execution_service=service,
+            cost_repository=CostRepository(service.database),
+            approval_repository=ApprovalRepository(service.database),
+        )
+        adapter = TelegramAdapter(controller, allowed_user_ids=set(user_id), allowed_chat_ids=set(chat_id))
+        serve_telegram(adapter, host, port)
+    except (XHControlError, ValueError, OSError) as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(1) from None
 
 
 if __name__ == "__main__":

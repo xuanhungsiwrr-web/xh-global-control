@@ -1,7 +1,7 @@
 workers:
 
   pc-main:
-    hostname: TRINITY-X1
+    hostname: XHOME-PC
     enabled: true
     priority: 100
 
@@ -9,8 +9,9 @@ workers:
       - windows
       - python
       - codex
+      - claude_code
       - filesystem
 
     paths:
-      git_root: "D:/AI_Space_laptop"
-      project_root: "D:/AI_Space_laptop"
+      git_root: "G:/My Drive/AI_Space/01_Development"
+      project_root: "G:/My Drive/AI_Space/02_Workspace/projects"

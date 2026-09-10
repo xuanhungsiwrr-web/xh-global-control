@@ -17,6 +17,25 @@ def test_configuration_loads(config_root, monkeypatch, tmp_path):
     assert not config.database_path.exists()
 
 
+def test_default_runtime_root_override_is_host_local(monkeypatch, tmp_path):
+    runtime = (tmp_path / "host-runtime").resolve()
+    monkeypatch.setenv("XH_CONTROL_RUNTIME_ROOT", str(runtime))
+
+    config = load_config()
+
+    assert config.database_path == runtime / "control.db"
+    assert Path(config.system.artifact_root) == runtime / "artifacts"
+    assert config.artifact_path == runtime / "artifacts"
+
+
+def test_explicit_config_root_ignores_host_runtime_override(config_root, monkeypatch, tmp_path):
+    monkeypatch.setenv("XH_CONTROL_RUNTIME_ROOT", str(tmp_path / "host-runtime"))
+
+    config = load_config(config_root)
+
+    assert config.database_path == tmp_path / "runtime/control.db"
+
+
 @pytest.mark.parametrize("filename", EXPECTED_CONFIG_ROOTS)
 def test_missing_file(config_root, filename):
     (config_root / filename).unlink()

@@ -78,9 +78,9 @@ paid channels are rejected unless their approval/budget paths authorize them.
 Measured latency and reported token counts are persisted without inventing
 missing usage or API cost.
 
-ACR-001 Option 1 is approved. The installed Codex `xh-tuvan` 0.7.3 has a separate
-plugin-owned process wrapper at `C:/Users/xuanh/plugins/xh-tuvan/bridge/wrapper.py`.
-`config/plugins.yaml` points to this stable local source file. Global launches
+ACR-001 Option 1 is approved. The `xh-tuvan` 0.9.0 source has a separate
+plugin-owned process wrapper at `bridge/wrapper.py`; `config/plugins.yaml`
+points to the current XHOME-PC source checkout. Global launches
 it with the current Python interpreter and a task-scoped context, then brokers
 one call through the assigned subscription channel. `ProcessExecutionService`
 composes registry, permissions, worker/router, attempt, channel, cost and audit
@@ -125,6 +125,9 @@ Relative `system.sqlite_path` values resolve against the configuration directory
 parent. Absolute paths are used directly. `validate-config` never creates runtime
 state. `db-init` creates the eight specified tables in one transaction and records
 schema version 2 with SQLite `user_version`; repeating it preserves existing data.
+Set `XH_CONTROL_RUNTIME_ROOT` to an absolute host-local directory to keep the
+default SQLite database and transient channel artifacts off a synced checkout;
+an explicit `--config-root` remains isolated and ignores this host override.
 Task-event updates and deletes are rejected by SQLite triggers. Future database
 connections must enable `PRAGMA foreign_keys = ON` to enforce foreign keys.
 

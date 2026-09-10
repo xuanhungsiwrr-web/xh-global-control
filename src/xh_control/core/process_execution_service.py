@@ -97,7 +97,7 @@ class ProcessExecutionService:
 
         transport = ProcessPluginAdapter(
             (sys.executable, str(executable)), context,
-            self.configuration.config_root.parent / self.configuration.system.artifact_root / "transport",
+            self.configuration.artifact_path / "transport",
             invoke, adapter.cancel,
         )
         registry = PluginRegistry()

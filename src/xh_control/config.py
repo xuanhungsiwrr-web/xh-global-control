@@ -3,6 +3,7 @@
 from pathlib import Path
 from typing import Annotated, Literal
 import json
+import os
 
 import yaml
 from pydantic import Field, ValidationError, model_validator
@@ -163,7 +164,14 @@ class Configuration(ContractModel):
     @property
     def database_path(self) -> Path:
         """Relative runtime paths are relative to the config root's parent."""
-        return (self.config_root.parent / self.system.sqlite_path).resolve()
+        path = Path(self.system.sqlite_path)
+        return path.resolve() if path.is_absolute() else (self.config_root.parent / path).resolve()
+
+    @property
+    def artifact_path(self) -> Path:
+        """Resolve artifact storage without re-rooting an absolute host path."""
+        path = Path(self.system.artifact_root)
+        return path.resolve() if path.is_absolute() else (self.config_root.parent / path).resolve()
 
     @model_validator(mode="after")
     def references_exist(self) -> "Configuration":
@@ -217,7 +225,20 @@ def load_config(config_root: Path | str | None = None) -> Configuration:
             value["channel_id"] = key
     try:
         # JSON validation accepts enum strings while retaining strict scalar typing.
-        return Configuration.model_validate_json(json.dumps(data, default=str), strict=True)
+        configuration = Configuration.model_validate_json(json.dumps(data, default=str), strict=True)
+        # Host-local runtime state may override the versioned relative defaults.
+        # Explicit config roots (notably test fixtures) remain fully isolated.
+        runtime_root = os.getenv("XH_CONTROL_RUNTIME_ROOT") if config_root is None else None
+        if runtime_root:
+            runtime_path = Path(runtime_root)
+            if not runtime_path.is_absolute():
+                raise ConfigurationError("XH_CONTROL_RUNTIME_ROOT must be an absolute path")
+            system = configuration.system.model_copy(update={
+                "sqlite_path": str(runtime_path / "control.db"),
+                "artifact_root": str(runtime_path / "artifacts"),
+            })
+            configuration = configuration.model_copy(update={"system": system})
+        return configuration
     except ValidationError as exc:
         locations = [".".join(map(str, error["loc"])) + ": " + error["type"] for error in exc.errors()]
         raise ConfigurationError(f"{root}: invalid configuration at " + "; ".join(locations)) from None
