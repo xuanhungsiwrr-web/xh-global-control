@@ -10,6 +10,7 @@ plugins:
     entrypoint: "G:/My Drive/AI_Space/01_Development/incoming/xh-tuvan-0.9.0/bridge/wrapper.py"
 
     accepted_task_types:
+      - generic
       - generate_report
       - review_report
       - analyze_project
