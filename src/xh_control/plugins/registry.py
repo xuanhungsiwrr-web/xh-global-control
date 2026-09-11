@@ -40,7 +40,10 @@ class PluginRegistry:
             raise PluginRegistrationError("plugin manifest must satisfy PluginManifest")
         if not isinstance(adapter, DomainPluginAdapter):
             raise PluginRegistrationError("plugin adapter must implement DomainPluginAdapter")
-        if manifest.interface_version != self.interface_version:
+        if not (
+            manifest.interface_version.startswith("1.")
+            and self.interface_version.startswith("1.")
+        ):
             raise PluginRegistrationError(
                 f"Plugin {manifest.plugin_id} uses interface {manifest.interface_version}; "
                 f"Global supports {self.interface_version}"

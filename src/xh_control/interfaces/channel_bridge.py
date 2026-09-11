@@ -39,7 +39,7 @@ def main() -> int:
     args = parser.parse_args()
     try:
         context = read_message(args.context)
-        if context["protocol_version"] != "1.0":
+        if context["protocol_version"] not in {"1.0", "1.1"}:
             raise ValueError("unsupported transport")
         root = args.context.resolve().parent
         request = json.loads(sys.stdin.buffer.read(MAX_MESSAGE + 1))

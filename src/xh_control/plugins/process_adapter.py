@@ -51,9 +51,13 @@ class ProcessPluginAdapter(DomainPluginAdapter):
         try:
             output, _ = await asyncio.wait_for(process.communicate(), 10)
             health = json.loads(output)
-            return process.returncode == 0 and health == {
-                "protocol_version": "1.0", "healthy": True,
-            }
+            protocol_version = health.get("protocol_version") if isinstance(health, dict) else None
+            return (
+                process.returncode == 0
+                and isinstance(protocol_version, str)
+                and protocol_version.startswith("1.")
+                and health.get("healthy") is True
+            )
         except (ValueError, TimeoutError):
             await terminate_tree(process)
             return False
@@ -72,7 +76,7 @@ class ProcessPluginAdapter(DomainPluginAdapter):
         directory = self.runtime_root / uuid4().hex
         directory.mkdir(parents=True)
         context = self.context | (context_overrides or {}) | {
-            "protocol_version": "1.0",
+            "protocol_version": "1.1",
             "channel_bridge": [sys.executable, "-m", "xh_control.interfaces.channel_bridge"],
             "timeout_seconds": self.timeout_seconds,
         }
