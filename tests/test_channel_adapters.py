@@ -117,7 +117,10 @@ def test_codex_execute_uses_stdin_ephemeral_sandbox_and_returns_artifact(tmp_pat
 
 
 def test_claude_execute_extracts_result_and_only_reported_token_usage(tmp_path):
+    seen = []
+
     async def runner(command, instruction, workspace, timeout):
+        seen.append(command)
         return CommandResult(
             0,
             '{"result":"claude output","usage":{"input_tokens":5,"output_tokens":2},'
@@ -141,6 +144,9 @@ def test_claude_execute_extracts_result_and_only_reported_token_usage(tmp_path):
     )
 
     assert response.success is True
+    assert "--restricted" in seen[0]
+    assert seen[0][seen[0].index("--permission-mode") + 1] == "dontAsk"
+    assert seen[0][seen[0].index("--permission-prompts") + 1] == "none"
     assert response.usage == {"input_tokens": 5, "output_tokens": 2}
     assert "cost" not in response.usage
 

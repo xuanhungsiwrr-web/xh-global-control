@@ -270,12 +270,19 @@ def test_process_execution_service_pause_persists_plugin_handoff(config_root, tm
     service.tasks.transition_task(task.task_id, TaskStatus.RUNNING, attempt_id=attempt.attempt_id, generation=attempt.generation)
 
     class SafeTransport:
+        completed = None
+
         async def pause(self, task_id):
             return "opaque://handoff/M6-safe"
 
-    service.active[task.task_id] = SafeTransport()
+        def complete_pause(self, task_id, persisted):
+            self.completed = (task_id, persisted)
+
+    transport = SafeTransport()
+    service.active[task.task_id] = transport
     asyncio.run(service.pause(task.task_id))
     paused = service.tasks.get_task(task.task_id)
     assert paused.status == TaskStatus.PAUSED
     assert service.tasks.get_attempt(attempt.attempt_id).status == TaskStatus.PAUSED
     assert service.checkpoint_service.load(paused).plugin_state_ref == "opaque://handoff/M6-safe"
+    assert transport.completed == (task.task_id, True)

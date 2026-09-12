@@ -18,11 +18,11 @@ class ClaudeCodeAdapter(CliSubscriptionAdapter):
         *,
         channel_id: str = "claude-code-subscription",
         model: str | None = None,
-        permission_mode: str = "plan",
+        permission_mode: str = "dontAsk",
         **kwargs,
     ) -> None:
-        if permission_mode not in {"plan", "default"}:
-            raise ValueError("Claude permission mode must be plan or default")
+        if permission_mode not in {"dontAsk", "plan", "default"}:
+            raise ValueError("unsupported Claude permission mode")
         self.permission_mode = permission_mode
         super().__init__(channel_id=channel_id, model=model, **kwargs)
 
@@ -53,6 +53,8 @@ class ClaudeCodeAdapter(CliSubscriptionAdapter):
             "--permission-mode",
             self.permission_mode,
         ]
+        if self.permission_mode == "dontAsk":
+            command.extend(("--permission-prompts", "none", "--restricted"))
         if self.model:
             command.extend(("--model", self.model))
         return tuple(command)

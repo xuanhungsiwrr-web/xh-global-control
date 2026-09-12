@@ -81,6 +81,30 @@ def test_forward_normalized_payload_once(monkeypatch):
     assert timeout == 15.0
 
 
+@pytest.mark.parametrize("command", ["/run x", "/resume T-1"])
+def test_execution_commands_use_execution_aware_timeout_without_retry(monkeypatch, command):
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def read(self):
+            return b'{"ok": true, "text": "Completed"}'
+
+    calls = []
+
+    class Opener:
+        def open(self, _request, *, timeout):
+            calls.append(timeout)
+            return Response()
+
+    monkeypatch.setattr(plugin, "build_opener", lambda *_args: Opener())
+    plugin._forward({"update_id": "1", "user_id": "2", "chat_id": "3", "text": command})
+    assert calls == [920.0]
+
+
 @pytest.mark.parametrize(
     "url",
     [

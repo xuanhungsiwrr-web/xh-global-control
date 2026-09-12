@@ -38,4 +38,7 @@ class PermissionPolicy:
             raise PermissionApprovalRequiredError(
                 "Claude project writes require an explicit non-interactive tool policy"
             )
-        return "plan"
+        # ``plan`` makes non-interactive Claude return a plan instead of the
+        # requested result. ``dontAsk`` plus the adapter's restricted mode and
+        # disabled permission prompts permits reads while denying writes.
+        return "dontAsk"
