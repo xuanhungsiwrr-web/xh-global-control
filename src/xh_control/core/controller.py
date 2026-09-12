@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime
+import logging
 from typing import Any
 
 from xh_control.config import Configuration
@@ -22,6 +23,8 @@ from xh_control.models import (
     TaskEnvelope,
 )
 
+logger = logging.getLogger(__name__)
+
 
 class GlobalController:
     """Own command semantics; Telegram remains a thin input/output adapter."""
@@ -38,8 +41,15 @@ class GlobalController:
         self._background: set[asyncio.Task[Any]] = set()
 
     async def handle_telegram_command(self, command: TelegramCommand, update: TelegramUpdate) -> str:
-        method = getattr(self, f"_command_{command.name}")
-        return await method(command, update)
+        try:
+            method = getattr(self, f"_command_{command.name}")
+            return await method(command, update)
+        except Exception:
+            logger.exception(
+                "Telegram command execution failed: command=%r update_id=%r user_id=%r chat_id=%r",
+                command, update.update_id, update.user_id, update.chat_id,
+            )
+            raise
 
     async def _command_run(self, command: TelegramCommand, update: TelegramUpdate) -> str:
         master, mode = self._preferences.get(update.user_id, (

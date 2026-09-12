@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import os
 from pathlib import Path
 import time
@@ -17,18 +18,40 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+DEFAULT_GLOBAL_URL = "http://127.0.0.1:8765/v1/telegram/update"
+logger = logging.getLogger("mock_telegram_gateway")
+
+
+def _log_http_failure(operation: str, exc: BaseException) -> None:
+    if isinstance(exc, HTTPError):
+        try:
+            response_body = exc.read().decode("utf-8", errors="replace")
+        except OSError:
+            response_body = "<unable to read HTTP error body>"
+        logger.error(
+            "%s HTTP failure: code=%s reason=%r body=%r",
+            operation, exc.code, exc.reason, response_body,
+            exc_info=True,
+        )
+    else:
+        logger.error("%s exception: %s: %s", operation, type(exc).__name__, exc, exc_info=True)
+
 
 def _telegram_call(token: str, method: str, payload: dict, timeout: float) -> dict:
     url = f"https://api.telegram.org/bot{token}/{method}"
+    logger.info("Telegram request: method=%s payload=%s", method, payload)
     request = Request(url, data=urlencode(payload).encode("utf-8"), method="POST")
     request.add_header("Content-Type", "application/x-www-form-urlencoded")
     try:
         with urlopen(request, timeout=timeout) as response:
             result = json.loads(response.read().decode("utf-8"))
     except (HTTPError, URLError, TimeoutError, OSError, ValueError) as exc:
+        _log_http_failure(f"Telegram {method}", exc)
         raise RuntimeError(f"Telegram {method} failed") from exc
     if not isinstance(result, dict) or result.get("ok") is not True:
+        logger.error("Telegram response rejected: method=%s response=%s", method, result)
         raise RuntimeError(f"Telegram {method} returned an invalid response")
+    logger.info("Telegram response: method=%s response=%s", method, result)
     return result
 
 
@@ -61,20 +84,28 @@ def normalize_update(update: dict) -> dict | None:
 
 def forward_update(update: dict, global_url: str, timeout: float) -> dict:
     body = json.dumps(update, ensure_ascii=False).encode("utf-8")
+    logger.info("Global Control request: url=%s payload=%s", global_url, update)
     request = Request(global_url, data=body, method="POST")
     request.add_header("Content-Type", "application/json")
     try:
         with urlopen(request, timeout=timeout) as response:
             result = json.loads(response.read().decode("utf-8"))
     except (HTTPError, URLError, TimeoutError, OSError, ValueError) as exc:
+        _log_http_failure("Global Control", exc)
         raise RuntimeError("Global Control endpoint failed") from exc
     if not isinstance(result, dict):
+        logger.error("Global Control response rejected: response=%s", result)
         raise RuntimeError("Global Control returned an invalid response")
+    logger.info("Global Control response: %s", result)
     return result
 
 
 def run(token: str, global_url: str, poll_timeout: int, http_timeout: float) -> None:
     offset: int | None = None
+    logger.info(
+        "Gateway started: global_url=%s poll_timeout=%s http_timeout=%s",
+        global_url, poll_timeout, http_timeout,
+    )
     while True:
         payload = {"timeout": poll_timeout}
         if offset is not None:
@@ -84,19 +115,22 @@ def run(token: str, global_url: str, poll_timeout: int, http_timeout: float) -> 
             for item in response.get("result", []):
                 if not isinstance(item, dict):
                     continue
+                logger.info("Telegram update received: %s", item)
                 update_id = item.get("update_id")
                 if isinstance(update_id, int):
                     offset = update_id + 1
                 normalized = normalize_update(item)
                 if normalized is None:
+                    logger.warning("Telegram update ignored: could not normalize update=%s", item)
                     continue
+                logger.info("Telegram update normalized: %s", normalized)
                 result = forward_update(normalized, global_url, http_timeout)
                 text = result.get("text") or result.get("error")
+                logger.info("Global Control command result: %s", result)
                 if isinstance(text, str) and text:
                     _telegram_call(token, "sendMessage", {"chat_id": normalized["chat_id"], "text": text}, http_timeout)
         except RuntimeError as exc:
-            # Do not print exception details: urllib errors may include URLs.
-            print(f"gateway warning: {exc}", flush=True)
+            logger.error("Gateway iteration failed: %s: %s", type(exc).__name__, exc, exc_info=True)
             time.sleep(3)
 
 
@@ -112,8 +146,12 @@ def _load_token(env_file: Path) -> str:
 
 
 def main() -> int:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
     parser = argparse.ArgumentParser(description="Temporary Telegram -> Global Control gateway")
-    parser.add_argument("--global-url", default="http://127.0.0.1:8765/v1/telegram/update")
+    parser.add_argument("--global-url", default=DEFAULT_GLOBAL_URL)
     parser.add_argument("--poll-timeout", type=int, default=30)
     parser.add_argument("--http-timeout", type=float, default=40.0)
     parser.add_argument("--env-file", type=Path, default=Path(r"C:\Users\xuanh\AppData\Local\hermes\.env"))

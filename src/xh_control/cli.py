@@ -1,6 +1,7 @@
 """Offline configuration and M1 task-core commands."""
 
 from datetime import UTC, datetime
+import logging
 from pathlib import Path
 from typing import Annotated
 
@@ -30,6 +31,7 @@ from .interfaces.telegram import TelegramAdapter
 from .interfaces.telegram_http import serve as serve_telegram
 
 app = typer.Typer(no_args_is_help=True)
+logger = logging.getLogger(__name__)
 ConfigRoot = Annotated[Path | None, typer.Option(help="Configuration directory; defaults to repository/config.")]
 
 
@@ -128,6 +130,10 @@ def telegram_serve(
     config_root: ConfigRoot = None,
 ) -> None:
     """Serve the Hermes-to-Global normalized Telegram update boundary."""
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
     if not user_id:
         typer.echo("At least one --user-id is required; no allow-all mode exists.", err=True)
         raise typer.Exit(2)
@@ -144,6 +150,7 @@ def telegram_serve(
         adapter = TelegramAdapter(controller, allowed_user_ids=set(user_id), allowed_chat_ids=set(chat_id))
         serve_telegram(adapter, host, port)
     except (XHControlError, ValueError, OSError) as exc:
+        logger.exception("telegram-serve failed to start or serve")
         typer.echo(str(exc), err=True)
         raise typer.Exit(1) from None
 

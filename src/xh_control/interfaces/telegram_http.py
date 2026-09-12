@@ -8,10 +8,13 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Callable
 
 from .telegram import TelegramAdapter, TelegramCommandError, TelegramUpdate
+
+logger = logging.getLogger(__name__)
 
 
 def handle_payload(adapter: TelegramAdapter, payload: dict) -> dict:
@@ -20,8 +23,10 @@ def handle_payload(adapter: TelegramAdapter, payload: dict) -> dict:
         update = TelegramUpdate.from_gateway_payload(payload)
         text = asyncio.run(adapter.handle_update(update))
     except TelegramCommandError as exc:
+        logger.warning("Telegram command rejected: %s", exc, exc_info=True)
         return {"ok": False, "error": str(exc)}
     except Exception:
+        logger.exception("Telegram command failed while handling payload=%r", payload)
         return {"ok": False, "error": "Global Control command failed"}
     return {"ok": True, "text": text}
 
@@ -37,7 +42,11 @@ def make_handler(adapter: TelegramAdapter) -> type[BaseHTTPRequestHandler]:
                 payload = json.loads(self.rfile.read(length))
                 response = handle_payload(adapter, payload)
             except (ValueError, json.JSONDecodeError):
+                logger.exception("Telegram HTTP request contained invalid JSON")
                 response = {"ok": False, "error": "Invalid JSON payload"}
+            except Exception:
+                logger.exception("Telegram HTTP request failed before response")
+                response = {"ok": False, "error": "Global Control command failed"}
             body = json.dumps(response, ensure_ascii=False).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")
