@@ -10,7 +10,7 @@ from xh_control.channels import ChannelRequest
 from xh_control.channels.factory import ChannelAdapterFactory
 from xh_control.channels.codex import CodexAdapter
 from xh_control.config import Configuration
-from xh_control.exceptions import PluginResultError, PluginUnavailableError
+from xh_control.exceptions import PluginPausedSignal, PluginResultError, PluginUnavailableError
 from xh_control.learning import OperationalMetricsService
 from xh_control.models import (ChannelClass, ChannelHealth, TaskEnvelope, TaskStatus,
                                PluginResult, ExecutionAttemptRecord)
@@ -45,7 +45,7 @@ class ProcessExecutionService:
     async def execute(
         self, task: TaskEnvelope, *, resume_handoff_uri: str | None = None,
         resume: bool = False,
-    ) -> PluginResult:
+    ) -> PluginResult | None:
         if task.task_id in self.active:
             raise PluginResultError("task already executing")
         existing = self.tasks.get_task(task.task_id) if resume else None
@@ -156,6 +156,8 @@ class ProcessExecutionService:
                                attempt_id=attempt.attempt_id)
             self._finish(task.task_id, attempt, target)
             return result
+        except PluginPausedSignal:
+            return None
         except BaseException:
             # Cancellation is a confirmed execution abort; M5 safe-stop/handoff is separate.
             target = TaskStatus.FAILED
@@ -183,17 +185,22 @@ class ProcessExecutionService:
         transport = self.active.get(task_id)
         if transport is None:
             raise PluginUnavailableError("active plugin process is unavailable")
-        handoff_uri = await transport.pause(task_id)
-        attempt = self.tasks.get_attempt(task.current_attempt_id)
-        refs = self.checkpoint_service.accessible_artifact_refs(task_id)
-        self.checkpoint_service.create(
-            task, attempt_id=attempt.attempt_id, generation=attempt.generation,
-            worker_id=attempt.worker_id, channel_id=attempt.channel_id,
-            plugin_state_ref=handoff_uri, artifact_refs=refs,
-        )
-        self.tasks.transition_attempt(task_id, attempt.attempt_id, attempt.generation, TaskStatus.PAUSED)
-        self.tasks.transition_task(task_id, TaskStatus.PAUSED,
-                                   attempt_id=attempt.attempt_id, generation=attempt.generation)
+        persisted = False
+        try:
+            handoff_uri = await transport.pause(task_id)
+            attempt = self.tasks.get_attempt(task.current_attempt_id)
+            refs = self.checkpoint_service.accessible_artifact_refs(task_id)
+            self.checkpoint_service.create(
+                task, attempt_id=attempt.attempt_id, generation=attempt.generation,
+                worker_id=attempt.worker_id, channel_id=attempt.channel_id,
+                plugin_state_ref=handoff_uri, artifact_refs=refs,
+            )
+            self.tasks.transition_attempt(task_id, attempt.attempt_id, attempt.generation, TaskStatus.PAUSED)
+            self.tasks.transition_task(task_id, TaskStatus.PAUSED,
+                                       attempt_id=attempt.attempt_id, generation=attempt.generation)
+            persisted = True
+        finally:
+            transport.complete_pause(task_id, persisted)
 
     async def resume(self, task_id: str) -> PluginResult:
         """Validate the durable checkpoint before handing control to a plugin resume transport."""

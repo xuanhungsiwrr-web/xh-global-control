@@ -73,6 +73,10 @@ class PluginResultError(PluginError):
     """A plugin returned data that cannot safely finalize its task."""
 
 
+class PluginPausedSignal(PluginError):
+    """Internal transport signal that a durable plugin handoff was accepted."""
+
+
 class ChannelError(XHControlError):
     """Base error for execution-channel probing and selection."""
 

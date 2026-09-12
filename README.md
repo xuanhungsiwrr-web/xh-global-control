@@ -148,3 +148,18 @@ contents.
 The automated tests use temporary databases and block network connections. Real
 channel smoke tests are separate from pytest. Telegram and artifact-first resume
 remain outside M4.
+
+## Hermes gateway integration
+
+Hermes owns Telegram polling and reply delivery. The native plugin source at
+`integrations/hermes_global_control/` intercepts only `/run`, `/tasks`, `/pause`,
+and `/resume`, then forwards a normalized update once to the loopback endpoint.
+Global Control still owns authorization, command parsing, routing, budget,
+workers, and durable state. The adapter rejects non-loopback endpoint overrides
+and never retries mutating commands automatically.
+
+On Windows, `scripts/run_telegram_control.ps1` starts the local control endpoint
+with an explicit Telegram user/chat allowlist and keeps runtime SQLite state
+under `%LOCALAPPDATA%\xh-global-control\runtime` unless
+`XH_CONTROL_RUNTIME_ROOT` is already set. The Hermes runtime plugin should link
+to this repository directory so there is only one editable source.

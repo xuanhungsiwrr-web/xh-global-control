@@ -11,7 +11,7 @@ import pytest
 from xh_control.channels import ChannelResponse
 from xh_control.config import load_config
 from xh_control.core.process_execution_service import ProcessExecutionService
-from xh_control.exceptions import PluginResultError, PermissionApprovalRequiredError
+from xh_control.exceptions import PluginPausedSignal, PluginResultError, PermissionApprovalRequiredError
 from xh_control.models import TaskEnvelope, TaskStatus
 from xh_control.plugins.process_adapter import ProcessPluginAdapter
 from xh_control.state import CostRepository
@@ -215,7 +215,9 @@ if c.get("resume_handoff_uri"):
     print(json.dumps({"task_id":t["task_id"],"status":"COMPLETED","outputs":[],"execution_summary":{"elapsed_seconds":0.1,"subscription_calls":1},"global_learning":{}}))
 else:
     while not (d/"pause.request.json").exists(): time.sleep(.01)
-    (d/"pause.response.json").write_text(json.dumps({"protocol_version":"1.1","task_id":t["task_id"],"handoff_uri":"opaque://handoff/M6"}))
+    pause={"protocol_version":"1.1","task_id":t["task_id"],"handoff_uri":"opaque://handoff/M6"}
+    (d/"pause.response.json").write_text(json.dumps(pause))
+    print(json.dumps(pause))
 '''
     task = envelope(tmp_path)
     async def invoke(request):
@@ -228,7 +230,8 @@ else:
         while not adapter._directories:
             await asyncio.sleep(.01)
         assert await adapter.pause(task.task_id) == "opaque://handoff/M6"
-        with pytest.raises(PluginResultError):
+        adapter.complete_pause(task.task_id, True)
+        with pytest.raises(PluginPausedSignal):
             await running
         result = await adapter.resume(task, "opaque://handoff/M6")
         assert result.task_id == task.task_id

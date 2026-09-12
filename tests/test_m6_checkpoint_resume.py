@@ -49,6 +49,24 @@ def test_checkpoint_round_trip_has_identity_revision_and_hash(config_root, tmp_p
     assert tasks.get_task("M6-TASK").latest_checkpoint_uri.endswith("CP-0001.json")
 
 
+def test_checkpoint_uses_v3_machine_state_directory(config_root, tmp_path):
+    (tmp_path / "30_Working" / ".ai").mkdir(parents=True)
+    tasks, artifacts, checkpoints, attempt = _services(config_root, tmp_path)
+
+    checkpoints.create(
+        tasks.get_task("M6-TASK"),
+        attempt_id=attempt.attempt_id,
+        generation=attempt.generation,
+        worker_id="pc-main",
+        channel_id="codex-subscription",
+        plugin_state_ref="opaque://handoff/1",
+        artifact_refs=[],
+    )
+
+    assert (tmp_path / "30_Working" / ".ai" / "checkpoints" / "CP-0001.json").is_file()
+    assert not (tmp_path / ".ai").exists()
+
+
 def test_checkpoint_rejects_missing_or_changed_artifact(config_root, tmp_path):
     tasks, artifacts, checkpoints, attempt = _services(config_root, tmp_path)
     source = tmp_path / "result.txt"

@@ -57,7 +57,10 @@ class CheckpointService:
         root = _local_path(task.task.project.workspace_uri)
         if root is None:
             raise CheckpointError("checkpoint workspace must be locally accessible")
-        checkpoint_dir = root / ".ai" / "checkpoints"
+        # xh-tuvan layout v3 keeps machine-owned state under 30_Working.
+        # Preserve the legacy location for generic and older workspaces.
+        state_root = root / "30_Working" / ".ai" if (root / "30_Working").is_dir() else root / ".ai"
+        checkpoint_dir = state_root / "checkpoints"
         checkpoint_dir.mkdir(parents=True, exist_ok=True)
         checkpoint_id = f"CP-{existing:04d}"
         values = {

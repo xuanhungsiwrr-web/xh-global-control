@@ -1,6 +1,9 @@
+import pytest
+
 from xh_control.config import load_config
 from xh_control.core import GlobalController, TaskService
 from xh_control.interfaces.telegram import TelegramCommand, TelegramUpdate
+from xh_control.interfaces.telegram import TelegramCommandError
 from xh_control.state import TaskRepository, initialize_database
 
 
@@ -47,7 +50,6 @@ def test_controller_preferences_are_scoped_to_telegram_user(config_root):
 
 
 def test_pause_and_resume_do_not_fall_back_to_m5_stub(config_root):
-    import pytest
     from xh_control.exceptions import TaskNotFoundError
     config = load_config(config_root)
     database = initialize_database(config)
@@ -58,3 +60,26 @@ def test_pause_and_resume_do_not_fall_back_to_m5_stub(config_root):
         run_immediate(controller.handle_telegram_command(TelegramCommand("pause", ("T-1",)), update))
     with pytest.raises(TaskNotFoundError):
         run_immediate(controller.handle_telegram_command(TelegramCommand("resume", ("T-1",)), update))
+
+
+def test_live_run_resolves_unique_project_alias_to_real_workspace(config_root, tmp_path):
+    config = load_config(config_root)
+    project_root = tmp_path / "projects"
+    workspace = project_root / "2609-SG-KeNhaBe-DXCT"
+    workspace.mkdir(parents=True)
+    config.workers["pc-main"].paths.project_root = str(project_root)
+    controller = GlobalController(config, task_service=object(), execution_service=object())
+
+    assert controller._workspace_uri("kenhabe", None, resolve_alias=True) == str(workspace.resolve())
+    assert controller._workspace_uri("ke-nha-be", None, resolve_alias=True) == str(workspace.resolve())
+
+
+def test_live_run_rejects_missing_project_alias_before_task_creation(config_root, tmp_path):
+    config = load_config(config_root)
+    project_root = tmp_path / "projects"
+    project_root.mkdir()
+    config.workers["pc-main"].paths.project_root = str(project_root)
+    controller = GlobalController(config, task_service=object(), execution_service=object())
+
+    with pytest.raises(TelegramCommandError, match="workspace not found"):
+        controller._workspace_uri("missing-project", None, resolve_alias=True)

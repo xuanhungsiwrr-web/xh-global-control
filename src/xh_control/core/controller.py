@@ -5,12 +5,14 @@ from __future__ import annotations
 import asyncio
 from datetime import UTC, datetime
 import logging
+from pathlib import Path
+import re
 from typing import Any
 
 from xh_control.config import Configuration
 from xh_control.core.identifiers import new_task_id
 from xh_control.exceptions import PluginUnavailableError
-from xh_control.interfaces.telegram import TelegramCommand, TelegramUpdate
+from xh_control.interfaces.telegram import TelegramCommand, TelegramCommandError, TelegramUpdate
 from xh_control.models import (
     ApprovalStatus,
     CostMode,
@@ -69,7 +71,14 @@ class GlobalController:
             task_type=command.option("task_type", "generic") or "generic",
             plugin=plugin,
             report_type=command.option("report_type"),
-            project=ProjectRef(project_id=project, workspace_uri=command.option("workspace", project) or project),
+            project=ProjectRef(
+                project_id=project,
+                workspace_uri=self._workspace_uri(
+                    project,
+                    command.option("workspace"),
+                    resolve_alias=self.execution_service is not None,
+                ),
+            ),
             execution=ExecutionRequest(master_preference=master, cost_mode=mode),
             permissions=PermissionRequest(level=self._permission(command.option("permission", "SAFE_EDIT"))),
             budget=TaskBudget(api_soft_usd=configured_budget.task_api_soft_usd, api_hard_usd=configured_budget.task_api_hard_usd),
@@ -168,6 +177,40 @@ class GlobalController:
     @staticmethod
     def _permission(value: str) -> PermissionLevel:
         return PermissionLevel(value.upper())
+
+    def _workspace_uri(self, project: str, explicit: str | None, *, resolve_alias: bool) -> str:
+        if explicit:
+            return explicit
+        if not resolve_alias:
+            return project
+
+        supplied = Path(project)
+        if supplied.is_absolute() and supplied.is_dir():
+            return str(supplied.resolve())
+
+        alias = re.sub(r"[^a-z0-9]", "", project.lower())
+        matches: dict[str, Path] = {}
+        if len(alias) >= 4:
+            for worker in self.configuration.workers.values():
+                if not worker.enabled:
+                    continue
+                root = Path(worker.paths.project_root)
+                if not root.is_dir():
+                    continue
+                for candidate in root.iterdir():
+                    normalized = re.sub(r"[^a-z0-9]", "", candidate.name.lower())
+                    if candidate.is_dir() and alias in normalized:
+                        resolved = candidate.resolve()
+                        matches[str(resolved).casefold()] = resolved
+        if len(matches) == 1:
+            return str(next(iter(matches.values())))
+        if len(matches) > 1:
+            raise TelegramCommandError(
+                f"Project alias is ambiguous: {project}. Pass workspace=<absolute path>."
+            )
+        raise TelegramCommandError(
+            f"Project workspace not found: {project}. Pass workspace=<absolute path>."
+        )
 
     @staticmethod
     def _summary(record) -> str:

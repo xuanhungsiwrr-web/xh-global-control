@@ -1,0 +1,5 @@
+name: global-control
+version: 0.1.0
+description: "Route scoped Telegram control commands from Hermes to XH Global Control."
+author: "XH AI"
+

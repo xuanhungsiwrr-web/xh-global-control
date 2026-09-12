@@ -10,7 +10,7 @@ import sys
 from uuid import uuid4
 
 from xh_control.channels import ChannelRequest, ChannelResponse
-from xh_control.exceptions import PluginResultError, PluginUnavailableError
+from xh_control.exceptions import PluginPausedSignal, PluginResultError, PluginUnavailableError
 from xh_control.interfaces.channel_bridge import MAX_MESSAGE, publish, read_message
 from xh_control.interfaces.processes import terminate_tree
 from xh_control.models import PluginResult, TaskEnvelope
@@ -38,6 +38,7 @@ class ProcessPluginAdapter(DomainPluginAdapter):
         self.timeout_seconds = timeout_seconds
         self.active: dict[str, asyncio.subprocess.Process] = {}
         self._directories: dict[str, Path] = {}
+        self._pause_outcomes: dict[str, asyncio.Future[bool]] = {}
         self.cancelled: set[str] = set()
 
     async def healthcheck(self) -> bool:
@@ -88,6 +89,8 @@ class ProcessPluginAdapter(DomainPluginAdapter):
         )
         self.active[task.task_id] = process
         self._directories[task.task_id] = directory
+        pause_outcome = asyncio.get_running_loop().create_future()
+        self._pause_outcomes[task.task_id] = pause_outcome
         communication = asyncio.create_task(process.communicate(task.model_dump_json().encode()))
         response = None
         try:
@@ -115,7 +118,20 @@ class ProcessPluginAdapter(DomainPluginAdapter):
                 if process.returncode != 0 or len(output) > MAX_MESSAGE:
                     raise PluginResultError("PLUGIN_PROCESS_FAILED")
                 try:
-                    result = PluginResult.model_validate_json(output)
+                    raw_output = json.loads(output)
+                except ValueError:
+                    raise PluginResultError("PLUGIN_RESULT_INVALID") from None
+                if (
+                    isinstance(raw_output, dict)
+                    and set(raw_output) == {"protocol_version", "task_id", "handoff_uri"}
+                    and raw_output.get("protocol_version") == "1.1"
+                    and raw_output.get("task_id") == task.task_id
+                ):
+                    if await pause_outcome:
+                        raise PluginPausedSignal("plugin paused with durable handoff")
+                    raise PluginResultError("plugin pause persistence failed")
+                try:
+                    result = PluginResult.model_validate(raw_output)
                 except ValueError:
                     raise PluginResultError("PLUGIN_RESULT_INVALID") from None
                 if result.task_id != task.task_id or result.status not in {"COMPLETED", "FAILED"}:
@@ -133,6 +149,8 @@ class ProcessPluginAdapter(DomainPluginAdapter):
                 if result.handoff_uri is not None:
                     raise PluginResultError("handoff is not supported by protocol 1.0")
                 return result
+        except PluginPausedSignal:
+            raise
         except BaseException as error:
             try:
                 await self.cancel_channel(task.task_id)
@@ -145,6 +163,7 @@ class ProcessPluginAdapter(DomainPluginAdapter):
             await asyncio.gather(communication, return_exceptions=True)
             self.active.pop(task.task_id, None)
             self._directories.pop(task.task_id, None)
+            self._pause_outcomes.pop(task.task_id, None)
             # Transport files contain no authoritative state and are not replayed.
             for name in ("context.json", "request.json", "response.json", "channel.claim",
                          "pause.request.json", "pause.response.json"):
@@ -185,6 +204,11 @@ class ProcessPluginAdapter(DomainPluginAdapter):
                 return handoff_uri
             await asyncio.sleep(0.02)
         raise PluginUnavailableError("plugin did not provide a safe handoff URI")
+
+    def complete_pause(self, task_id: str, persisted: bool) -> None:
+        outcome = self._pause_outcomes.get(task_id)
+        if outcome is not None and not outcome.done():
+            outcome.set_result(persisted)
 
     async def resume(self, task: TaskEnvelope, handoff_uri: str) -> PluginResult:
         if not isinstance(handoff_uri, str) or not handoff_uri.strip():
