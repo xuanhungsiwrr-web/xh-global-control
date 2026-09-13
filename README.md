@@ -163,3 +163,13 @@ with an explicit Telegram user/chat allowlist and keeps runtime SQLite state
 under `%LOCALAPPDATA%\xh-global-control\runtime` unless
 `XH_CONTROL_RUNTIME_ROOT` is already set. The Hermes runtime plugin should link
 to this repository directory so there is only one editable source.
+
+Install the local endpoint as a limited-privilege Windows task with:
+
+```powershell
+.\scripts\install_telegram_autostart.ps1 -UserId <telegram-user-id> -ChatId <telegram-chat-id>
+```
+
+The installer starts it at logon and adds a one-minute watchdog trigger. It also
+keeps the endpoint alive across battery and idle transitions; concurrent starts
+are ignored.

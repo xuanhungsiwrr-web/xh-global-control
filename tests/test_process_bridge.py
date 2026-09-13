@@ -260,6 +260,36 @@ def test_process_execution_service_resume_passes_checkpoint_uri_to_bridge(config
     assert service.tasks.get_task(task.task_id).status == TaskStatus.COMPLETED
 
 
+def test_resume_recovers_interrupted_running_task_from_durable_checkpoint(config_root, tmp_path):
+    service, fake = configured(config_root, tmp_path)
+    task = envelope(tmp_path)
+    service.tasks.create_task(task)
+    attempt = service.tasks.create_attempt(task.task_id, "pc-main", "codex-subscription")
+    service.tasks.transition_task(task.task_id, TaskStatus.QUEUED)
+    service.tasks.transition_task(task.task_id, TaskStatus.ASSIGNED,
+                                  attempt_id=attempt.attempt_id, generation=attempt.generation)
+    service.tasks.transition_task(task.task_id, TaskStatus.RUNNING,
+                                  attempt_id=attempt.attempt_id, generation=attempt.generation)
+    service.tasks.transition_attempt(task.task_id, attempt.attempt_id,
+                                     attempt.generation, TaskStatus.RUNNING)
+    service.checkpoint_service.create(
+        service.tasks.get_task(task.task_id), attempt_id=attempt.attempt_id,
+        generation=attempt.generation, worker_id=attempt.worker_id,
+        channel_id=attempt.channel_id, plugin_state_ref="opaque://handoff/recover",
+        artifact_refs=[],
+    )
+
+    result = asyncio.run(service.resume(task.task_id))
+
+    assert result.status == "COMPLETED"
+    assert fake.calls[0].prompt_or_instruction == "opaque://handoff/recover"
+    assert service.tasks.get_task(task.task_id).status == TaskStatus.COMPLETED
+    assert any(
+        event.event_type == "INTERRUPTED_RESUME_RECOVERED"
+        for event in service.events.list_for_task(task.task_id)
+    )
+
+
 def test_process_execution_service_pause_persists_plugin_handoff(config_root, tmp_path):
     service, fake = configured(config_root, tmp_path)
     task = envelope(tmp_path)

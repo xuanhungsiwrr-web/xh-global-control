@@ -129,6 +129,8 @@ def test_claude_execute_extracts_result_and_only_reported_token_usage(tmp_path):
 
     adapter = ClaudeCodeAdapter(
         output_root=tmp_path / "results",
+        additional_read_dirs=(tmp_path / "plugin",),
+        allowed_tools=("Bash(*xh.py status*)",),
         execution_runner=runner,
         output_id_factory=lambda: "one",
     )
@@ -147,6 +149,9 @@ def test_claude_execute_extracts_result_and_only_reported_token_usage(tmp_path):
     assert "--restricted" in seen[0]
     assert seen[0][seen[0].index("--permission-mode") + 1] == "dontAsk"
     assert seen[0][seen[0].index("--permission-prompts") + 1] == "none"
+    assert seen[0][seen[0].index("--tools") + 1] == "Bash,Read,Glob,Grep"
+    assert seen[0][seen[0].index("--add-dir") + 1] == str((tmp_path / "plugin").resolve())
+    assert seen[0][seen[0].index("--allowedTools") + 1] == "Bash(*xh.py status*)"
     assert response.usage == {"input_tokens": 5, "output_tokens": 2}
     assert "cost" not in response.usage
 
