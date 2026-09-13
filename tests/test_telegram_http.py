@@ -1,7 +1,24 @@
 import logging
+import socket
 from threading import Event, Thread
 
+import pytest
+
 from xh_control.interfaces.telegram_http import AsyncCommandDispatcher, handle_payload
+
+
+_connect = socket.socket.connect
+_socketpair = socket.socketpair
+
+
+@pytest.fixture(autouse=True)
+def event_loop_socketpair(no_network, monkeypatch):
+    def pair(*args, **kwargs):
+        with monkeypatch.context() as scoped:
+            scoped.setattr(socket.socket, "connect", _connect)
+            return _socketpair(*args, **kwargs)
+
+    monkeypatch.setattr(socket, "socketpair", pair)
 
 
 def test_handle_payload_logs_full_controller_exception(caplog, monkeypatch):
@@ -27,7 +44,7 @@ def test_handle_payload_logs_full_controller_exception(caplog, monkeypatch):
     assert "RuntimeError: synthetic /run failure" in caplog.text
 
 
-def test_dispatcher_keeps_concurrent_run_and_pause_on_one_event_loop():
+def test_dispatcher_keeps_concurrent_run_and_pause_on_one_event_loop(monkeypatch):
     import asyncio
 
     class Adapter:

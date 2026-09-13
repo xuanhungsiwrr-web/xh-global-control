@@ -60,7 +60,10 @@ class CheckpointService:
         # xh-tuvan layout v3 keeps machine-owned state under 30_Working.
         # Preserve the legacy location for generic and older workspaces.
         state_root = root / "30_Working" / ".ai" if (root / "30_Working").is_dir() else root / ".ai"
-        checkpoint_dir = state_root / "checkpoints"
+        # Revisions are numbered per task, so isolate each task on disk as well.
+        # A digest keeps caller-supplied task IDs from becoming path segments.
+        task_scope = hashlib.sha256(task.task.task_id.encode("utf-8")).hexdigest()[:24]
+        checkpoint_dir = state_root / "checkpoints" / task_scope
         checkpoint_dir.mkdir(parents=True, exist_ok=True)
         checkpoint_id = f"CP-{existing:04d}"
         values = {

@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+import hashlib
 
 import pytest
 
@@ -33,6 +34,12 @@ def _services(config_root, tmp_path):
     return tasks, artifacts, checkpoints, attempt
 
 
+def _checkpoint_path(root, *, v3=False):
+    task_scope = hashlib.sha256(b"M6-TASK").hexdigest()[:24]
+    state_root = root / "30_Working" / ".ai" if v3 else root / ".ai"
+    return state_root / "checkpoints" / task_scope / "CP-0001.json"
+
+
 def test_checkpoint_round_trip_has_identity_revision_and_hash(config_root, tmp_path):
     tasks, artifacts, checkpoints, attempt = _services(config_root, tmp_path)
     task = tasks.get_task("M6-TASK")
@@ -63,8 +70,33 @@ def test_checkpoint_uses_v3_machine_state_directory(config_root, tmp_path):
         artifact_refs=[],
     )
 
-    assert (tmp_path / "30_Working" / ".ai" / "checkpoints" / "CP-0001.json").is_file()
+    assert _checkpoint_path(tmp_path, v3=True).is_file()
     assert not (tmp_path / ".ai").exists()
+
+
+def test_checkpoint_paths_are_isolated_per_task(config_root, tmp_path):
+    tasks, artifacts, checkpoints, first_attempt = _services(config_root, tmp_path)
+    second = tasks.create_task(_envelope("M6-TASK-2", tmp_path))
+    tasks.transition_task(second.task.task_id, TaskStatus.QUEUED)
+    second_attempt = tasks.create_attempt(second.task.task_id, "pc-main", "codex-subscription")
+    tasks.transition_task(second.task.task_id, TaskStatus.ASSIGNED,
+                          attempt_id=second_attempt.attempt_id, generation=second_attempt.generation)
+    tasks.transition_task(second.task.task_id, TaskStatus.RUNNING,
+                          attempt_id=second_attempt.attempt_id, generation=second_attempt.generation)
+
+    first = checkpoints.create(
+        tasks.get_task("M6-TASK"), attempt_id=first_attempt.attempt_id,
+        generation=first_attempt.generation, worker_id="pc-main",
+        channel_id="codex-subscription", plugin_state_ref="opaque://handoff/1", artifact_refs=[],
+    )
+    second = checkpoints.create(
+        tasks.get_task("M6-TASK-2"), attempt_id=second_attempt.attempt_id,
+        generation=second_attempt.generation, worker_id="pc-main",
+        channel_id="codex-subscription", plugin_state_ref="opaque://handoff/2", artifact_refs=[],
+    )
+
+    assert first.checkpoint_id == second.checkpoint_id == "CP-0001"
+    assert tasks.get_task("M6-TASK").latest_checkpoint_uri != tasks.get_task("M6-TASK-2").latest_checkpoint_uri
 
 
 def test_checkpoint_rejects_missing_or_changed_artifact(config_root, tmp_path):
@@ -107,7 +139,7 @@ def test_checkpoint_rejects_wrong_task_identity(config_root, tmp_path):
     tasks, artifacts, checkpoints, attempt = _services(config_root, tmp_path)
     checkpoint = checkpoints.create(tasks.get_task("M6-TASK"), attempt_id=attempt.attempt_id, generation=attempt.generation,
                                     worker_id="pc-main", channel_id=None, plugin_state_ref="opaque://state", artifact_refs=[])
-    path = tmp_path / ".ai" / "checkpoints" / "CP-0001.json"
+    path = _checkpoint_path(tmp_path)
     raw = __import__("json").loads(path.read_text(encoding="utf-8"))
     raw["task_id"] = "OTHER"
     path.write_text(__import__("json").dumps(raw), encoding="utf-8")

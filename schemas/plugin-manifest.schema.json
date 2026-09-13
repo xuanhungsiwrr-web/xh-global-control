@@ -58,6 +58,22 @@
       "type": "array",
       "uniqueItems": true
     },
+    "channel_read_roots": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Channel Read Roots",
+      "type": "array",
+      "uniqueItems": true
+    },
+    "channel_allowed_tools": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Channel Allowed Tools",
+      "type": "array",
+      "uniqueItems": true
+    },
     "allowed_global_learning_fields": {
       "items": {
         "type": "string"

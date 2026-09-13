@@ -25,7 +25,7 @@ def test_safe_edit_keeps_model_project_workspace_read_only():
     policy = PermissionPolicy(load_config().permissions)
 
     assert policy.codex_sandbox(task(PermissionLevel.SAFE_EDIT)) == "read-only"
-    assert policy.claude_permission_mode(task(PermissionLevel.SAFE_EDIT)) == "plan"
+    assert policy.claude_permission_mode(task(PermissionLevel.SAFE_EDIT)) == "dontAsk"
 
     config = load_config()
     adapter = ChannelAdapterFactory(config).create(

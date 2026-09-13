@@ -39,10 +39,18 @@ class ChannelAdapterFactory:
                 output_root=self.output_root,
             )
         if channel.surface == "claude_code":
+            manifest = self.configuration.plugins.get(task.plugin)
+            read_dirs = tuple(
+                Path(value).resolve()
+                for value in sorted(manifest.channel_read_roots if manifest else ())
+                if Path(value).is_absolute() and Path(value).is_dir()
+            )
             return ClaudeCodeAdapter(
                 channel_id=channel.channel_id,
                 model=channel.model,
                 permission_mode=self.permission_policy.claude_permission_mode(task),
+                additional_read_dirs=read_dirs,
+                allowed_tools=tuple(sorted(manifest.channel_allowed_tools if manifest else ())),
                 output_root=self.output_root,
             )
         raise ChannelError(f"Unsupported M4 execution surface: {channel.surface}")

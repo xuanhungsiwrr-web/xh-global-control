@@ -18,6 +18,8 @@ class PluginManifest(ContractModel):
     owns_domain_workflow: bool = True
     owns_domain_learning: bool = True
     required_global_capabilities: set[str] = Field(default_factory=set)
+    channel_read_roots: set[str] = Field(default_factory=set)
+    channel_allowed_tools: set[str] = Field(default_factory=set)
     allowed_global_learning_fields: set[str] = Field(
         default_factory=lambda: set(ALLOWED_GLOBAL_LEARNING_FIELDS)
     )

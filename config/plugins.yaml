@@ -22,6 +22,13 @@ plugins:
       - filesystem
       - python
 
+    channel_read_roots:
+      - "G:/My Drive/AI_Space/01_Development/incoming/xh-tuvan-0.9.0"
+
+    channel_allowed_tools:
+      - 'Bash(python "G:/My Drive/AI_Space/01_Development/incoming/xh-tuvan-0.9.0/scripts/xh.py" status *)'
+      - 'Bash(python "G:\My Drive\AI_Space\01_Development\incoming\xh-tuvan-0.9.0\scripts\xh.py" status *)'
+
     allowed_global_learning_fields:
       - model_performance
       - cost

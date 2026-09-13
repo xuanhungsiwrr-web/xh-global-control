@@ -18,12 +18,16 @@ class ClaudeCodeAdapter(CliSubscriptionAdapter):
         *,
         channel_id: str = "claude-code-subscription",
         model: str | None = None,
-        permission_mode: str = "plan",
+        permission_mode: str = "dontAsk",
+        additional_read_dirs: tuple[Path, ...] = (),
+        allowed_tools: tuple[str, ...] = (),
         **kwargs,
     ) -> None:
-        if permission_mode not in {"plan", "default"}:
-            raise ValueError("Claude permission mode must be plan or default")
+        if permission_mode not in {"dontAsk", "plan", "default"}:
+            raise ValueError("unsupported Claude permission mode")
         self.permission_mode = permission_mode
+        self.additional_read_dirs = tuple(path.resolve() for path in additional_read_dirs)
+        self.allowed_tools = tuple(allowed_tools)
         super().__init__(channel_id=channel_id, model=model, **kwargs)
 
     def _interpret_status(
@@ -53,6 +57,15 @@ class ClaudeCodeAdapter(CliSubscriptionAdapter):
             "--permission-mode",
             self.permission_mode,
         ]
+        if self.permission_mode == "dontAsk":
+            command.extend((
+                "--permission-prompts", "none", "--restricted",
+                "--tools", "Bash,Read,Glob,Grep",
+            ))
+        for directory in self.additional_read_dirs:
+            command.extend(("--add-dir", str(directory)))
+        if self.allowed_tools:
+            command.extend(("--allowedTools", ",".join(self.allowed_tools)))
         if self.model:
             command.extend(("--model", self.model))
         return tuple(command)

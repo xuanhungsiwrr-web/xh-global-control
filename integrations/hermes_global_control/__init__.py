@@ -45,8 +45,11 @@ def _control_url() -> str:
     return url
 
 
-def _forward(payload: dict[str, str], *, timeout: float = 15.0) -> str:
+def _forward(payload: dict[str, str], *, timeout: float | None = None) -> str:
     """Forward once; mutating commands are deliberately never auto-retried."""
+    if timeout is None:
+        command = payload.get("text", "").lstrip().split(maxsplit=1)[0].split("@", 1)[0].lower()
+        timeout = 920.0 if command in {"/run", "/resume"} else 45.0 if command == "/pause" else 15.0
     request = Request(
         _control_url(),
         data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
@@ -116,4 +119,3 @@ def _wire_telegram(application: Any, _adapter: Any) -> None:
 
 def register(ctx: Any) -> None:
     ctx.register_platform_handler("telegram", _wire_telegram)
-

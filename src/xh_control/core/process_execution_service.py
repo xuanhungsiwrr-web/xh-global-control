@@ -159,6 +159,10 @@ class ProcessExecutionService:
         except PluginPausedSignal:
             return None
         except BaseException:
+            # Once the two-phase pause has durably fenced the task, shutdown or
+            # request cancellation must not overwrite PAUSED with FAILED.
+            if self.tasks.get_task(task.task_id).status == TaskStatus.PAUSED:
+                return None
             # Cancellation is a confirmed execution abort; M5 safe-stop/handoff is separate.
             target = TaskStatus.FAILED
             self.events.append(task.task_id, "PLUGIN_EXECUTION_FAILED", {"reason": "execution_aborted"}, attempt_id=attempt.attempt_id)
@@ -206,6 +210,29 @@ class ProcessExecutionService:
         """Validate the durable checkpoint before handing control to a plugin resume transport."""
         task = self.tasks.get_task(task_id)
         PermissionPolicy(self.configuration.permissions).validate(task.task)
+        if (
+            task.status == TaskStatus.RUNNING
+            and task_id not in self.active
+            and task.latest_checkpoint_uri is not None
+            and task.current_attempt_id is not None
+        ):
+            # The service may have stopped after a resume began but before the
+            # plugin consumed its handoff. Restore the durable PAUSED fence;
+            # the plugin still validates single-use handoff consumption.
+            attempt = self.tasks.get_attempt(task.current_attempt_id)
+            self.tasks.transition_attempt(
+                task_id, attempt.attempt_id, attempt.generation, TaskStatus.PAUSED,
+            )
+            self.tasks.transition_task(
+                task_id, TaskStatus.PAUSED,
+                attempt_id=attempt.attempt_id, generation=attempt.generation,
+            )
+            self.events.append(
+                task_id, "INTERRUPTED_RESUME_RECOVERED",
+                {"attempt_id": attempt.attempt_id, "generation": attempt.generation},
+                attempt_id=attempt.attempt_id,
+            )
+            task = self.tasks.get_task(task_id)
         if task.status != TaskStatus.PAUSED:
             raise PluginResultError("task is not PAUSED")
         checkpoint = self.checkpoint_service.load(task)
